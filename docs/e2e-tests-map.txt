@@ -482,6 +482,7 @@ admin -
     - (missing) [5AEWBN0]
   reviews - [TyT5DKW7U]
     gets emailed about review tasks:  — see (502M7)
+    see spam below: (4BKS0)
     delete flagged:   — also see (6JS3)
     clear flag:   — also see (6JS3)
     approve posts:  (2WY0)
@@ -516,6 +517,9 @@ admin -
     review tasks and authz -
       mods won't see other's flagged direct message posts:
         - mod-review.2browsers.test.ts  TyT6KRBEQ2
+
+spam: (4BKS0)
+          - spam-basic-akismet.2browsers.test.ts
 
 delete user:    NEXT was a bug, when deleted by admin
   deletes henself:

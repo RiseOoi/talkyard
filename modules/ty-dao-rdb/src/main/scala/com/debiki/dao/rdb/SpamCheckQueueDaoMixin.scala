@@ -48,18 +48,12 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
         req_ip,
         req_uri)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      on conflict (site_id, post_id) do update set
-        post_rev_nr = greatest(spam_check_queue3.post_rev_nr, excluded.post_rev_nr)
+      -- probably not needed:
+      on conflict (site_id, post_id, post_rev_nr) do nothing
       """
-    // What if appr rev nr gets decremented? should that perhaps not be allowed? [85YKF30]
-    // For example, someone inserting spam. But then edits and removes it — then the edited
-    // version will be spam checked. And then (if this can be done, not yet implemented)
-    // the user reverts to the earlier spammy version.
-    // Think about this if I implement some revert-to-earlier-version functionality that
-    // decrements the post revision nr.
-    val actionAt = post.currentRevLastEditedAt.getOrElse(post.createdAt)
+    val createdAt = post.currentRevLastEditedAt.getOrElse(post.createdAt)
     val values = List(
-      actionAt, siteId.asAnyRef, post.id.asAnyRef, post.currentRevisionNr.asAnyRef,
+      createdAt, siteId.asAnyRef, post.id.asAnyRef, post.currentRevisionNr.asAnyRef,
       byWho.id.asAnyRef, byWho.idCookie.orNullVarchar, byWho.browserFingerprint.asAnyRef,
       spamRelReqStuff.userAgent.orNullVarchar, spamRelReqStuff.referer.orNullVarchar,
       byWho.ip, spamRelReqStuff.uri)

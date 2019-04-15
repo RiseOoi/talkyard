@@ -621,8 +621,8 @@ class LoginWithOpenAuthController @Inject()(cc: ControllerComponents, edContext:
       throwForbidden("EdE4SWWB9", s"Username is reserved: '$username'; choose another username")
 
     globals.spamChecker.detectRegistrationSpam(request, name = username, email = emailAddress) map {
-        isSpamReason =>
-      SpamChecker.throwForbiddenIfSpam(isSpamReason, "EdE2KP89")
+          spamFoundResults: SpamFoundResults =>
+      SpamChecker.throwForbiddenIfSpam(spamFoundResults, "TyE2AKF067")
 
       val becomeOwner = LoginController.shallBecomeOwner(request, emailAddress)
 

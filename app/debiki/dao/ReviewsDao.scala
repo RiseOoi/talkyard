@@ -53,6 +53,10 @@ trait ReviewsDao {
   self: SiteDao =>
 
 
+  /** This only remembers a *decision* about what to do. The decision is then
+    * carried out, by JanitorActor.executePendingReviewTasks, after a short
+    * undo-decision timeout.
+    */
   def makeReviewDecisionIfAuthz(taskId: ReviewTaskId, requester: Who, anyRevNr: Option[Int],
         decision: ReviewDecision) {
     readWriteTransaction { tx =>
@@ -205,6 +209,7 @@ trait ReviewsDao {
               approvePostImpl(post.pageId, post.nr, approverId = decidedById, tx)
               perhapsCascadeApproval(post.createdById, pageIdsToRefresh)(tx)
             }
+            // tell Akismt it's not spam, if there's a SpamCheckTask.
           case ReviewDecision.DeletePostOrPage =>
             if (task.isForBothTitleAndBody) {
               val pageId = task.pageId getOrDie "TyE4K85R2"
@@ -215,6 +220,8 @@ trait ReviewsDao {
               deletePostImpl(post.pageId, postNr = post.nr, deletedById = decidedById,
                   doingReviewTask = Some(task), browserIdData, tx)
             }
+            // tell Akismt it's not spam, if there's *no* SpamCheckTask.
+            // Need a special "Delete as spam" button?
         }
       }
     }

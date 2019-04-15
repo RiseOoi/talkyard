@@ -169,8 +169,8 @@ class LoginWithPasswordController @Inject()(cc: ControllerComponents, edContext:
       throwForbidden("EdE5PKW01", s"Username is reserved: '$username'; choose another username")
 
     globals.spamChecker.detectRegistrationSpam(request, name = username, email = emailAddress) map {
-        isSpamReason =>
-      SpamChecker.throwForbiddenIfSpam(isSpamReason, "EdE7KVF2_")
+          spamFoundResults: SpamFoundResults =>
+      SpamChecker.throwForbiddenIfSpam(spamFoundResults, "EdE7KVF2_")
 
       // Password strength tested in createPasswordUserCheckPasswordStrong() below.
 

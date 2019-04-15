@@ -44,7 +44,7 @@ trait SystemTransaction {
     quotaLimitMegabytes: Option[Int], maxSitesPerIp: Int, maxSitesTotal: Int,
     isTestSiteOkayToDelete: Boolean, pricePlan: PricePlan, createdAt: When): Site
 
-  def siteTransaction(siteId: SiteId): SiteTransaction
+  def siteTransaction(siteId: SiteId): SiteTransaction  // oops doesn't (and cannot) use SiteDao.synchronizeOnSiteId
 
   def loadSites(): immutable.Seq[Site]
 

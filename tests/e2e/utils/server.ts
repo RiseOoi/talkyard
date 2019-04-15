@@ -227,6 +227,8 @@ function getEmailsSentToAddrs(siteId: SiteId): { num: number, addrsByTimeAsc: st
 function getLastVerifyEmailAddressLinkEmailedTo(siteId: SiteId, emailAddress: string,
       browser?): string {
   const email = getLastEmailSenTo(siteId, emailAddress, browser);
+  dieIf(!email, `No email has yet been sent to ${emailAddress}. ` + (!browser ? '' :
+    "Include a 'browser' as 3rd arguement, to poll-wait for an email.  [TyE2ABKF057]"));
   return utils.findFirstLinkToUrlIn('https?://.*/-/login-password-confirm-email', email.bodyHtmlText);
 }
 

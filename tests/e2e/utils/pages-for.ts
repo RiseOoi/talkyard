@@ -4840,6 +4840,11 @@ function pagesFor(browser) {
         api.waitUntilTextMatches('.modal-body', 'TyEXSRFEXP_');
       },
 
+      waitForIsSpamError: function() {
+        // The //s regex modifier makes '.' match newlines. But it's not available before ES2018.
+        api.serverErrorDialog.waitAndAssertTextMatches(/spam.*EdE7KVF2_/s);
+      },
+
       close: function() {
         api.waitAndClick('.e_SED_CloseB');
         api.waitUntilGone('.modal-dialog.dw-server-error');

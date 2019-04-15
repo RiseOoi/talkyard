@@ -686,11 +686,15 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
     var spamCheckTasks = Vector[SpamCheckTask]()
 
     val query = s"""
-      select * from spam_check_queue3 order by action_at limit $limit
+      select * from spam_check_queue3
+      where results_at is null
+      -- and post_rev_nr = max(...), COULD load and check only the most recent post_rev_nr
+      order by action_at limit $limit
       """
 
     runQuery(query, Nil, rs => {
       while (rs.next()) {
+        val createdAt = getWhen(rs, "action_at")
         val siteId = rs.getInt("site_id")
         val postId = rs.getInt("post_id")
         val postRevNr = rs.getInt("post_rev_nr")
@@ -705,7 +709,8 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
         val browserIdData = BrowserIdData(
           ip, idCookie = browserIdCookie, fingerprint = browserFingerprint)
 
-        spamCheckTasks :+= SpamCheckTask(siteId, postId = postId, postRevNr = postRevNr,
+        spamCheckTasks :+= SpamCheckTask(
+          createdAt, siteId, postId = postId, postRevNr = postRevNr,
           who = Who(userId, browserIdData),
           requestStuff = SpamRelReqStuff(userAgent = userAgent, referer = referer, uri = uri))
 

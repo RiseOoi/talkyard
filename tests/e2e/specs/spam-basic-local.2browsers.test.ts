@@ -139,6 +139,8 @@ describe("spam test, no external services:", () => {
     strangersBrowser.loginDialog.fillInPassword("public1234");
   });
 
+  // todo: ip addr link
+
   it("... clicks submit", () => {
     strangersBrowser.loginDialog.clickSubmit();
   });

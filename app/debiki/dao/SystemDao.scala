@@ -388,11 +388,14 @@ class SystemDao(
     }
   }
 
-  def dealWithSpam(spamCheckTask: SpamCheckTask, isSpamReason: String) {
+  // COULD move to SpamSiteDao, since now uses only a per site tx.
+  //
+  def dealWithSpam(spamCheckTask: SpamCheckTask, spamFoundResults: SpamFoundResults) {
     // COULD if is new page, no replies, then hide the whole page (no point in showing a spam page).
     // Then mark section page stale below (4KWEBPF89).
-    val sitePageIdToRefresh = readWriteTransaction { transaction =>
-      val siteTransaction = transaction.siteTransaction(spamCheckTask.siteId)
+    val sitePageIdToRefresh = globals.siteDao(spamCheckTask.siteId).readWriteTransaction {
+          siteTransaction =>
+
       val postBefore = siteTransaction.loadPost(spamCheckTask.postId) getOrElse {
         // It was hard deleted?
         return
@@ -401,10 +404,12 @@ class SystemDao(
       val postAfter = postBefore.copy(
         bodyHiddenAt = Some(siteTransaction.now.toJavaDate),
         bodyHiddenById = Some(SystemUserId),
-        bodyHiddenReason = Some(s"Spam because: $isSpamReason"))
+        bodyHiddenReason = Some(
+          s"Is spam or malware?:\n\n" +
+          spamFoundResults.mkString("\n\n")))
 
       val reviewTask = PostsDao.createOrAmendOldReviewTask(
-        createdById = SystemUserId, postAfter, reasons = Vector(ReviewReason.PostIsSpam),
+        createdById = SystemUserId, postAfter, reasons = Vector(ReviewReason.PostIsSpam), // + spam check id
         siteTransaction): ReviewTask
 
       siteTransaction.updatePost(postAfter)
@@ -418,8 +423,12 @@ class SystemDao(
           if (postAfter.isOrigPostReply) oldMeta.numOrigPostRepliesVisible - 1
           else oldMeta.numOrigPostRepliesVisible
 
+        val newNumRepliesVisible =
+          if (postAfter.isReply) oldMeta.numRepliesVisible - 1
+          else oldMeta.numRepliesVisible
+
         val newMeta = oldMeta.copy(
-          numRepliesVisible = oldMeta.numRepliesVisible - 1,
+          numRepliesVisible = newNumRepliesVisible,
           numOrigPostRepliesVisible = newNumOrigPostRepliesVisible,
           version = oldMeta.version + 1)
 
