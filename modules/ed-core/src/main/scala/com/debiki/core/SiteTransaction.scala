@@ -139,6 +139,8 @@ trait SiteTransaction {
   def indexPagesSoon(pageMeta: PageMeta*)
 
   def spamCheckPostsSoon(byWho: Who, spamRelReqStuff: SpamRelReqStuff, posts: Post*)
+  def loadPendingSpamCheckTasksForPost(postId: PostId): immutable.Seq[SpamCheckTask]
+  def updateSpamCheckTaskWithResults(spamCheckTask: SpamCheckTask)
 
   // Rename to insert/loadPageMemberIds? [rename]
   def insertMessageMember(pageId: PageId, userId: UserId, addedById: UserId): Boolean

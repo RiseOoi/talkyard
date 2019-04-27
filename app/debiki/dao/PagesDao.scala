@@ -130,7 +130,7 @@ trait PagesDao {
       titleSource: String, titleHtmlSanitized: String,
       bodySource: String, bodyHtmlSanitized: String,
       pinOrder: Option[Int], pinWhere: Option[PinPageWhere],
-      byWho: Who, spamRelReqStuff: Option[SpamRelReqStuff],   // spamRelReqStuff url != page path?
+      byWho: Who, spamRelReqStuff: Option[SpamRelReqStuff],
       tx: SiteTransaction,
       hidePageBody: Boolean = false,
       layout: Option[PageLayout] = None,
@@ -315,7 +315,11 @@ trait PagesDao {
     insertAuditLogEntry(auditLogEntry, tx)
 
     tx.indexPostsSoon(titlePost, bodyPost)
-    spamRelReqStuff.foreach(tx.spamCheckPostsSoon(byWho, _, titlePost, bodyPost))
+
+    // The uri is now sth like /-/create-page. Change to the path to the page
+    // we're creating.
+    val spamStuffPageUri = spamRelReqStuff.map(_.copy(uri = pagePath.value))
+    spamStuffPageUri.foreach(tx.spamCheckPostsSoon(byWho, _, titlePost, bodyPost))
 
     // Don't start rendering html for this page in the background. [5KWC58]
     // (Instead, when the user requests the page, we'll render it directly in

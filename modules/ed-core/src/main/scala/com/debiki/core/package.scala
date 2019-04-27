@@ -466,11 +466,20 @@ package object core {
 
 
   /** Spam related request stuff, e.g. referer and user agent.
+    * Also includes the user name and email, at the time when the maybe-spam post
+    * was posted — so isn't forgotten, in case the user changes hens name and
+    * email, before staff has had time to review — Akismet wants misclassification
+    * reports to include all original data. [AKISMET].
     */
   case class SpamRelReqStuff(
     userAgent: Option[String],
     referer: Option[String],
-    uri: String)
+    uri: String,
+    userName: Option[String],
+    userEmail: Option[String],
+    userUrl: Option[String],
+    userTrustLevel: Option[TrustLevel],
+  )
 
 
   /** Primary key = site id, post id and also pots revision nr, so that if
@@ -479,23 +488,58 @@ package object core {
     * edits and removes the links — then the spam link revision will
     * still be remembered, so the staff who later on handle the review task
     * can see what triggered it.
+    *
+    * Also includes some data that might change, after the post was made,
+    * and before it gets reviewed — Akismet wants misclassification
+    * reports to include all original data. [AKISMET]
+    *
+    * @postedToPageId — good to remember, if the post gets moved to a different page, later.
+    * @pagePublishedAt — if the page got unpublished and re published, good to remember
+    *   the publication date, as it was, when the maybe-spam-post was posted.
+    * @resultText — human readable spam check results description.
+    * @misclassificationsReportedAt — if the spam check service thought something was spam
+    *   when it wasn't, or vice versa, this is when this misclassification was reported
+    *   to the spam check service, so it can learn and improve.
     */
   case class SpamCheckTask(
     createdAt: When,
     siteId: SiteId,
     postId: PostId,
     postRevNr: Int,
+    postedToPageId: PageId,
+    pagePublishedAt: When,
     who: Who,
     requestStuff: SpamRelReqStuff,
+    textToSpamCheck: Option[String],
+    language: Option[String],
     resultAt: Option[When] = None,
     resultJson: Option[JsObject] = None,
-    resultHuman: Option[String] = None) {
+    resultText: Option[String] = None,
+    numIsSpamResults: Option[Int],
+    numNotSpamResults: Option[Int],
+    humanSaysIsSpam: Option[Boolean],
+    misclassificationsReportedAt: Option[When]) {
 
-    require(resultJson.isDefined == resultAt.isDefined, "TyE4RBK6RS11")
-    require(resultJson.isDefined == resultHuman.isDefined, "TyE4RBK6RS22")
+    require(resultAt.isDefined == resultJson.isDefined, "TyE4RBK6RS11")
+    require(resultAt.isDefined == resultText.isDefined, "TyE4RBK6RS22")
+    require(resultAt.isDefined == numIsSpamResults.isDefined, "TyE4RBK6RS33")
+    require(resultAt.isDefined == numNotSpamResults.isDefined, "TyE4RBK6RS44")
+    // We need both spam check results, and a human's opinion, before
+    // we can report this spam check as a misclassification.
+    require((resultAt.isDefined && humanSaysIsSpam.isDefined) ||
+      misclassificationsReportedAt.isEmpty, "TyE4RBK6RS55")
 
     def sitePostId = SitePostId(siteId, postId)
     def siteUserId = SiteUserId(siteId, who.id)
+
+    def isMisclassified: Option[Boolean] =
+      if (resultAt.isEmpty || humanSaysIsSpam.isEmpty) None
+      else Some(
+        if ((numIsSpamResults.get > 0 && !humanSaysIsSpam.get) ||
+            (numNotSpamResults.get > 0 && humanSaysIsSpam.get))
+          true
+        else
+          false)
   }
 
 

@@ -41,15 +41,21 @@ class SystemDao(
 
   val memCache = new MemCache(NoSiteId, cache, globals.mostMetrics)
 
-  protected def readOnlyTransaction[R](fn: SystemTransaction => R): R =
+  private def readOnlyTransaction[R](fn: SystemTransaction => R): R =
     dbDao2.readOnlySystemTransaction(fn)
 
-  protected def readWriteTransaction[R](fn: SystemTransaction => R): R =
+  // WARNING: Causes transaction rollbacks, rarely and infrequently, if writing
+  // to the same parts of the same tables, at the same time as per site transactions.
+  // Even if the app server code is otherwise fine and bug free. It's a database thing.
+  // So, don't use this for updating per-site things. Instead, create a site specific
+  // dao and site specific transactions — they do the database writes under mutex,
+  // and so avoids any tx rollbacks.
+  private def dangerous_readWriteTransaction[R](fn: SystemTransaction => R): R =
     dbDao2.readWriteSystemTransaction(fn)
 
 
   def applyEvolutions() {
-    readWriteTransaction(_.applyEvolutions())
+    dangerous_readWriteTransaction(_.applyEvolutions())
   }
 
 
@@ -90,7 +96,7 @@ class SystemDao(
     readOnlyTransaction(_.loadSitesWithIds(Seq(siteId)).headOption)
 
   def updateSites(sites: Seq[(SiteId, SiteStatus)]) {
-    readWriteTransaction(_.updateSites(sites))
+    dangerous_readWriteTransaction(_.updateSites(sites))  // BUG tx race, rollback risk
     for ((siteId, _) <- sites) {
       globals.siteDao(siteId).emptyCache()
     }
@@ -101,7 +107,8 @@ class SystemDao(
     val pubId =
       if (globals.isOrWasTest) Site.FirstSiteTestPublicId
       else Site.newPublId()
-    readWriteTransaction { sysTx =>
+    // Not dangerous: The site doesn't yet exist, so no other transactions can access it.
+    dangerous_readWriteTransaction { sysTx =>
       val firstSite = sysTx.createSite(Some(FirstSiteId),
         pubId = pubId, name = "Main Site", SiteStatus.NoAdmin,
         creatorIp = "0.0.0.0",
@@ -162,7 +169,8 @@ class SystemDao(
       config.createSite.maxSitesTotal + 5
     }
 
-    try readWriteTransaction { sysTx =>
+    // Not dangerous: The site doesn't yet exist, so no other transactions can access it.
+    try dangerous_readWriteTransaction { sysTx =>
       if (deleteOldSite) {
         dieIf(hostname.exists(!Hostname.isE2eTestHostname(_)), "TyE7PK5W8")
         dieIf(!Hostname.isE2eTestHostname(name), "TyE50K5W4")
@@ -361,13 +369,13 @@ class SystemDao(
   }
 
   def deleteFromIndexQueue(post: Post, siteId: SiteId) {
-    readWriteTransaction { transaction =>
+    dangerous_readWriteTransaction { transaction =>  // BUG tx race, rollback risk
       transaction.deleteFromIndexQueue(post, siteId)
     }
   }
 
   def addEverythingInLanguagesToIndexQueue(languages: Set[String]) {
-    readWriteTransaction { transaction =>
+    dangerous_readWriteTransaction { transaction =>  // BUG tx race, rollback risk
       transaction.addEverythingInLanguagesToIndexQueue(languages)
     }
   }
@@ -382,7 +390,7 @@ class SystemDao(
   }
 
   def deleteFromSpamCheckQueue(task: SpamCheckTask) {
-    readWriteTransaction { transaction =>
+    dangerous_readWriteTransaction { transaction =>  // BUG tx race, rollback risk
       transaction.deleteFromSpamCheckQueue(
           task.siteId, postId = task.postId, postRevNr = task.postRevNr)
     }
@@ -393,7 +401,7 @@ class SystemDao(
   def dealWithSpam(spamCheckTask: SpamCheckTask, spamFoundResults: SpamFoundResults) {
     // COULD if is new page, no replies, then hide the whole page (no point in showing a spam page).
     // Then mark section page stale below (4KWEBPF89).
-    val sitePageIdToRefresh = globals.siteDao(spamCheckTask.siteId).readWriteTransaction {
+    val sitePageIdToRefresh = globals.siteDao(spamCheckTask.siteId).readWriteTransaction {  // BUG tx race, rollback risk
           siteTransaction =>
 
       val postBefore = siteTransaction.loadPost(spamCheckTask.postId) getOrElse {
@@ -409,10 +417,18 @@ class SystemDao(
           spamFoundResults.mkString("\n\n")))
 
       val reviewTask = PostsDao.createOrAmendOldReviewTask(
-        createdById = SystemUserId, postAfter, reasons = Vector(ReviewReason.PostIsSpam), // + spam check id
+        createdById = SystemUserId, postAfter, reasons = Vector(ReviewReason.PostIsSpam),
         siteTransaction): ReviewTask
 
       siteTransaction.updatePost(postAfter)
+
+      // Add the spam check results from the spam check service, and ...
+      siteTransaction.updateSpamCheckTaskWithResults(spamCheckTask)
+
+      // ... add a review task, so a human will check this out. When hen has
+      // done that, we'll hide or show the post, if needed, and, if the human
+      // disagrees with the spam check service, we'll tell the spam check service
+      // that it did a mistake. [SPMSCLRPT]
       siteTransaction.upsertReviewTask(reviewTask)
 
       // If the post was visible, need to rerender the page + update post counts.
@@ -454,13 +470,13 @@ class SystemDao(
   // ----- The janitor actor
 
   def deletePersonalDataFromOldAuditLogEntries() {
-    readWriteTransaction { tx =>
+    dangerous_readWriteTransaction { tx =>  // BUG tx race, rollback risk
       tx.deletePersonalDataFromOldAuditLogEntries()
     }
   }
 
   def deleteOldUnusedUploads()  {
-    readWriteTransaction { tx =>
+    dangerous_readWriteTransaction { tx =>  // BUG tx race, rollback risk
       tx.deleteOldUnusedUploads()
     }
   }
@@ -480,10 +496,25 @@ class SystemDao(
   }
 
 
+  def reportSpamClassificationMistakesBackToSpamCheckServices() {
+    val spamCheckTasks: immutable.Seq[SpamCheckTask] =
+      readOnlyTransaction(_.loadMisclassifiedSpamCheckTasks(22))
+
+    for (task <- spamCheckTasks) {
+      globals.spamChecker.reportClassificationMistake(task)
+      val siteDao = globals.siteDao(task.siteId)
+      val taskDone = task.copy(misclassificationsReportedAt = Some(globals.now))
+      siteDao.readWriteTransaction { tx =>
+        tx.updateSpamCheckTaskWithResults(taskDone)
+      }
+    }
+  }
+
+
   // ----- Testing
 
   def emptyDatabase() {
-    readWriteTransaction { transaction =>
+    dangerous_readWriteTransaction { transaction =>
       dieIf(!globals.isOrWasTest, "EsE500EDB0")
       transaction.emptyDatabase()
     }

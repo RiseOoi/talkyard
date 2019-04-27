@@ -470,6 +470,40 @@ object RdbUtil {
   }
 
 
+  def getSpamCheckTask(rs: js.ResultSet): SpamCheckTask = {
+    SpamCheckTask(
+      createdAt = getWhen(rs, "action_at"),
+      siteId = rs.getInt("site_id"),
+      postId = rs.getInt("post_id"),
+      postRevNr = rs.getInt("post_rev_nr"),
+      postedToPageId = rs.getString("posted_to_page_id"),
+      pagePublishedAt = getWhen(rs, "page_published_at"),
+      who = Who(
+        id = rs.getInt("user_id"),
+        BrowserIdData(
+          ip = rs.getString("req_ip"),
+          idCookie = getOptString(rs, "browser_id_cookie"),
+          fingerprint = rs.getInt("browser_fingerprint"))),
+      requestStuff = SpamRelReqStuff(
+        userAgent = getOptionalStringNotEmpty(rs, "req_user_agent"),
+        referer = getOptionalStringNotEmpty(rs, "req_referer"),
+        uri = rs.getString("req_uri"),
+        userName = getOptString(rs, "user_name"),
+        userEmail = getOptString(rs, "user_email"),
+        userUrl = getOptString(rs, "user_url"),
+        userTrustLevel = getOptInt(rs, "user_trust_level").flatMap(TrustLevel.fromInt)),
+      textToSpamCheck = getOptString(rs, "post_content"),
+      language = getOptString(rs, "language"),
+      resultAt = getOptWhen(rs, "results_at"),
+      resultJson = getOptJsObject(rs, "results_json"),
+      resultText = getOptString(rs, "results_text"),
+      numIsSpamResults = getOptInt(rs, "num_is_spam_results"),
+      numNotSpamResults = getOptInt(rs, "num_not_spam_results"),
+      humanSaysIsSpam = getOptBool(rs, "human_thinks_is_spam"),
+      misclassificationsReportedAt = getOptWhen(rs, "misclassifications_reported_at"))
+  }
+
+
   def getNotification(rs: js.ResultSet): Notification = {
     val siteId = rs.getInt("site_id")
     val notfId = rs.getInt("notf_id")

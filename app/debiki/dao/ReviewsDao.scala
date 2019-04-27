@@ -209,7 +209,7 @@ trait ReviewsDao {
               approvePostImpl(post.pageId, post.nr, approverId = decidedById, tx)
               perhapsCascadeApproval(post.createdById, pageIdsToRefresh)(tx)
             }
-            // tell Akismt it's not spam, if there's a SpamCheckTask.
+            updateSpamCheckTasks(humanThinksIsSpam = false, task, tx)
           case ReviewDecision.DeletePostOrPage =>
             if (task.isForBothTitleAndBody) {
               val pageId = task.pageId getOrDie "TyE4K85R2"
@@ -220,13 +220,30 @@ trait ReviewsDao {
               deletePostImpl(post.pageId, postNr = post.nr, deletedById = decidedById,
                   doingReviewTask = Some(task), browserIdData, tx)
             }
-            // tell Akismt it's not spam, if there's *no* SpamCheckTask.
-            // Need a special "Delete as spam" button?
+            updateSpamCheckTasks(humanThinksIsSpam = true, task, tx)
         }
       }
     }
 
     refreshPagesInAnyCache(pageIdsToRefresh)
+  }
+
+
+  private def updateSpamCheckTasks(humanThinksIsSpam: Boolean, reviewTask: ReviewTask,
+      tx: SiteTransaction) {
+    val postId = reviewTask.postId getOrElse {
+      return
+    }
+    val spamCheckTasksAnyRevNr: Seq[SpamCheckTask] = tx.loadPendingSpamCheckTasksForPost(postId)
+    val spamCheckTasksSameRevNr =
+      spamCheckTasksAnyRevNr.filter(reviewTask.decidedAtRevNr is _.postRevNr)
+    spamCheckTasksSameRevNr foreach { spamCheckTask =>
+      val taskWithHumanResult = spamCheckTask.copy(humanSaysIsSpam = Some(humanThinksIsSpam))
+      // The Janitor thread will soon take a look at this spam check task, and
+      // report any classification error (spam detected, but human says isn't spam, or vice versa)
+      // to the spam check service. [SPMSCLRPT]
+      tx.updateSpamCheckTaskWithResults(taskWithHumanResult)
+    }
   }
 
 

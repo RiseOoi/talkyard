@@ -95,6 +95,7 @@ trait SystemTransaction {
   // ----- Spam check queue
 
   def loadStuffToSpamCheck(limit: Int): StuffToSpamCheck
+  def loadMisclassifiedSpamCheckTasks(limit: Int): immutable.Seq[SpamCheckTask]
   def deleteFromSpamCheckQueue(siteId: SiteId, postId: PostId, postRevNr: Int)
 
   // ----- The janitor: Old stuff deletion

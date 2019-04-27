@@ -118,6 +118,20 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
   }
 
 
+  // COULD move to new superclass? Dupl code [8FKW20Q]
+  def runQueryFindMany[R](query: String, values: List[AnyRef],
+    singleRowHandler: js.ResultSet => R): immutable.Seq[R] = {
+    val results = ArrayBuffer[R]()
+    runQuery(query, values, rs => {
+      while (rs.next) {
+        val result = singleRowHandler(rs)
+        results.append(result)
+      }
+    })
+    results.toVector
+  }
+
+
   // Dupl code [9UFK2Q7]
   def runQueryBuildMultiMap[K, V](query: String, values: List[AnyRef],
     singleRowHandler: js.ResultSet => (K, V)): immutable.Map[K, immutable.Seq[V]] = {
@@ -694,31 +708,16 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
 
     runQuery(query, Nil, rs => {
       while (rs.next()) {
-        val createdAt = getWhen(rs, "action_at")
-        val siteId = rs.getInt("site_id")
-        val postId = rs.getInt("post_id")
-        val postRevNr = rs.getInt("post_rev_nr")
-        val userId = rs.getInt("user_id")
-        val browserIdCookie = Option(rs.getString("browser_id_cookie"))
-        val browserFingerprint = rs.getInt("browser_fingerprint")
-        val userAgent = getOptionalStringNotEmpty(rs, "req_user_agent")
-        val referer = getOptionalStringNotEmpty(rs, "req_referer")
-        val ip = rs.getString("req_ip")
-        val uri = rs.getString("req_uri")
+        val spamCheckTask = getSpamCheckTask(rs)
+        spamCheckTasks :+= spamCheckTask
 
-        val browserIdData = BrowserIdData(
-          ip, idCookie = browserIdCookie, fingerprint = browserFingerprint)
-
-        spamCheckTasks :+= SpamCheckTask(
-          createdAt, siteId, postId = postId, postRevNr = postRevNr,
-          who = Who(userId, browserIdData),
-          requestStuff = SpamRelReqStuff(userAgent = userAgent, referer = referer, uri = uri))
+        val siteId = spamCheckTask.siteId
 
         val postIds = postIdsBySite.getOrElseUpdate(siteId, ArrayBuffer[PostId]())
-        postIds.append(postId)
+        postIds.append(spamCheckTask.postId)
 
         val userIds = userIdsBySite.getOrElseUpdate(siteId, ArrayBuffer[UserId]())
-        userIds.append(userId)
+        userIds.append(spamCheckTask.who.id)
       }
     })
 
@@ -742,7 +741,21 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
   }
 
 
+  def loadMisclassifiedSpamCheckTasks(limit: Int): immutable.Seq[SpamCheckTask] = {
+    val query = s"""
+      select * from spam_check_queue3
+      where
+          is_misclassified and
+          misclassifications_reported_at is null
+      order by results_at asc
+      limit $limit
+      """
+    runQueryFindMany(query, Nil, getSpamCheckTask)
+  }
+
+
   def deleteFromSpamCheckQueue(siteId: SiteId, postId: PostId, postRevNr: Int) {
+    // BUG: db race, tx rollback
     val statement = s"""
       delete from spam_check_queue3
       where site_id = ? and post_id = ? and post_rev_nr <= ?

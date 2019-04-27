@@ -96,15 +96,15 @@ class SpamCheckActor(
   private def checkForSpam(spamCheckTask: SpamCheckTask, stuffToSpamCheck: StuffToSpamCheck) {
     globals.spamChecker.detectPostSpam(spamCheckTask, stuffToSpamCheck) map {
         spamFoundResults: SpamFoundResults =>
-      //if (spamFoundResults.nonEmpty) {
-        // We're not inside receive() any longer, so its try..catch is of no use now.
-        try systemDao.dealWithSpam(spamCheckTask, spamFoundResults)
-        catch {
-          case ex: Exception =>
-            p.Logger.error(
-                s"Error dealing with spam, post id: ${spamCheckTask.sitePostId} [EdE7GSB4]", ex)
-        }
-      //}
+      // We're not inside receive() any longer, so its try..catch is of no use now.
+      try {
+        systemDao.dealWithSpam(spamCheckTask, spamFoundResults)
+      }
+      catch {
+        case ex: Exception =>
+          p.Logger.error(
+              s"Error dealing with spam, post id: ${spamCheckTask.sitePostId} [EdE7GSB4]", ex)
+      }
       // Not the actor's thread, so deleting the task from the queue in here tend to result
       // in PostgreSQL serialization errors. Do later instead.
       //spamTasksDone.add(spamCheckTask)

@@ -888,6 +888,32 @@ class SpamChecker(
 
     body.toString()
   }
+
+
+  def reportClassificationMistake(spamCheckTask: SpamCheckTask): Future[Boolean] = {
+    val promise = Promise[Boolean]()
+    val origin = originOfSiteId(spamCheckTask.siteId) getOrElse {
+      promise.success(false)
+      return promise.future
+    }
+
+    // Currently only Akismet supported.
+    akismetKeyIsValidPromise.future onComplete {
+      case Success(true) =>
+        //https://your-api-key.rest.akismet.com/1.1/submit-spam
+        val akismetBody = makeAkismetRequestBody(AkismetSpamType.Signup,
+          origin, spamCheckTask.who.browserIdData, spamCheckTask.requestStuff,
+          user = None, anyName = spamCheckTask.anyName, anyEmail = spamCheckTask.anyEmail)
+        checkViaAkismet(akismetBody)
+        promise.success(true)
+      case _ =>
+        promise.success(false)
+    }
+    promise.future
+  }
+
+
+
 }
 
 

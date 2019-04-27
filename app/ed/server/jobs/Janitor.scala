@@ -103,6 +103,7 @@ class JanitorActor(val globals: Globals) extends Actor {
   private def executePendingReviewTasks() {
     val dao = globals.systemDao
     dao.executePendingReviewTasks()
+    dao.reportSpamClassificationMistakesBackToSpamCheckServices()
   }
 
 }
