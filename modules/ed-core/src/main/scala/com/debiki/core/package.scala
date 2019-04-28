@@ -485,7 +485,7 @@ package object core {
     postId: PostId,
     postNr: PostNr,
     postRevNr: Int,
-    postedToPageId: PageId,  // RENAME to pageId
+    pageId: PageId,
     pageType: PageType,
     pagePublishedAt: When,
     textToSpamCheck: String,
@@ -525,6 +525,12 @@ package object core {
     humanSaysIsSpam: Option[Boolean] = None,
     misclassificationsReportedAt: Option[When] = None) {
 
+    def key: SpamCheckTask.Key =
+      postToSpamCheck match {
+        case None => Right(siteUserId)
+        case Some(p) => Left((siteId, p.postId, p.postRevNr))
+      }
+
     require(resultAt.isDefined == resultJson.isDefined, "TyE4RBK6RS11")
     require(resultAt.isDefined == resultText.isDefined, "TyE4RBK6RS22")
     require(resultAt.isDefined == numIsSpamResults.isDefined, "TyE4RBK6RS33")
@@ -545,6 +551,10 @@ package object core {
           true
         else
           false)
+  }
+
+  object SpamCheckTask {
+    type Key = Either[(SiteId, PostId, Int), SiteUserId]
   }
 
 

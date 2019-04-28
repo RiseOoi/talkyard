@@ -84,7 +84,7 @@ class LoginWithOpenAuthController @Inject()(cc: ControllerComponents, edContext:
   def conf: Configuration = globals.rawConf
 
   private val cache = caffeine.cache.Caffeine.newBuilder()
-    .maximumSize(20*1000)  // change to config value, e.g. 1e9 = 1GB mem cache. Default to 50M?
+    .maximumSize(20*1000) // change to config value, e.g. 1e9 = 1GB mem cache. Default to 50M? [ADJMEMUSG]
     // Don't expire too quickly — the user needs time to choose & typ a username.
     // SECURITY COULD expire sooner (say 10 seconds) if just logging in, because then
     // the user need not think or type anything.

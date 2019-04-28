@@ -694,50 +694,15 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
   }
 
 
-  def loadStuffToSpamCheck(limit: Int): StuffToSpamCheck = {
-    val postIdsBySite = mutable.Map[SiteId, ArrayBuffer[PostId]]()
-    val userIdsBySite = mutable.Map[SiteId, ArrayBuffer[UserId]]()
-    var spamCheckTasks = Vector[SpamCheckTask]()
-
+  def loadStuffToSpamCheck(limit: Int): immutable.Seq[SpamCheckTask] = {
     val query = s"""
       select * from spam_check_queue3
       where results_at is null
       -- and post_rev_nr = max(...), COULD load and check only the most recent post_rev_nr
-      order by action_at limit $limit
+      -- index: scq_actionat__i
+      order by created_at asc limit $limit
       """
-
-    runQuery(query, Nil, rs => {
-      while (rs.next()) {
-        val spamCheckTask = getSpamCheckTask(rs)
-        spamCheckTasks :+= spamCheckTask
-
-        val siteId = spamCheckTask.siteId
-
-        val postIds = postIdsBySite.getOrElseUpdate(siteId, ArrayBuffer[PostId]())
-        postIds.append(spamCheckTask.postId)
-
-        val userIds = userIdsBySite.getOrElseUpdate(siteId, ArrayBuffer[UserId]())
-        userIds.append(spamCheckTask.who.id)
-      }
-    })
-
-    val postsBySite = Map[SiteId, immutable.Seq[Post]](
-      postIdsBySite.toSeq.map(siteAndPostIds => {
-        val siteId = siteAndPostIds._1
-        val siteTrans = siteTransaction(siteId)
-        val posts = siteTrans.loadPostsByUniqueId(siteAndPostIds._2).values.toVector
-        (siteId, posts)
-      }): _*)
-
-    val usersBySite = Map[SiteId, Map[UserId, Participant]](
-      userIdsBySite.toSeq.map(siteAndUserIds => {
-        val siteId = siteAndUserIds._1
-        val siteTrans = siteTransaction(siteId)
-        val users = siteTrans.loadParticipantsAsMap(siteAndUserIds._2)
-        (siteId, users)
-      }): _*)
-
-    StuffToSpamCheck(postsBySite, usersBySite, spamCheckTasks)
+    runQueryFindMany(query, Nil, getSpamCheckTask)
   }
 
 
@@ -745,6 +710,7 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
     val query = s"""
       select * from spam_check_queue3
       where
+          -- index: spamcheckqueue_next_miscl_i
           is_misclassified and
           misclassifications_reported_at is null
       order by results_at asc
@@ -754,16 +720,8 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
   }
 
 
-  def deleteFromSpamCheckQueue(siteId: SiteId, postId: PostId, postRevNr: Int) {
-    // BUG: db race, tx rollback
-    val statement = s"""
-      delete from spam_check_queue3
-      where site_id = ? and post_id = ? and post_rev_nr <= ?
-      """
-    val values = List(siteId.asAnyRef, postId.asAnyRef, postRevNr.asAnyRef)
-    runUpdateSingleRow(statement, values)
-  }
-
+  val SomeMonthsAgo = 5
+  val SomeYearsAgo = 5
 
   def deletePersonalDataFromOldAuditLogEntries() {
     TESTS_MISSING
@@ -790,7 +748,7 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
         forgotten = 0 and
         done_at < ?
       """
-    runUpdate(deleteABitStatement, List(now.minusMonths(5).asTimestamp))
+    runUpdate(deleteABitStatement, List(now.minusMonths(SomeMonthsAgo).asTimestamp))
 
     PRIVACY; COULD // make x years below configurable
     // Now no need to remember region and city any longer. (But remember which country.)
@@ -804,7 +762,21 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
         forgotten = 1 and
         done_at < ?
       """
-    runUpdate(deleteMoreStatement, List(now.minusYears(5).asTimestamp))
+    runUpdate(deleteMoreStatement, List(now.minusYears(SomeMonthsAgo).asTimestamp))
+  }
+
+
+  def deletePersonalDataFromOldSpamCheckTasks() {
+    // For now, just delete any old tasks. Later, could be nice to remember tasks
+    // that resulted in spam actually being found — since that can result in the author
+    // getting auto blocked; then, can be good to know why that happened.
+    val deleteMoreStatement = s"""
+      delete from spam_check_queue3 where
+      where
+        -- index: scq_actionat__i
+        created_at < ?
+      """
+    runUpdate(deleteMoreStatement, List(now.minusYears(SomeYearsAgo).asTimestamp))
   }
 
 

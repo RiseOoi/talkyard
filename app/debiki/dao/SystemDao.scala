@@ -44,7 +44,7 @@ class SystemDao(
   private def readOnlyTransaction[R](fn: SystemTransaction => R): R =
     dbDao2.readOnlySystemTransaction(fn)
 
-  // WARNING: Causes transaction rollbacks, rarely and infrequently, if writing
+  // WARNING: [PGSERZERR] Causes transaction rollbacks, rarely and infrequently, if writing
   // to the same parts of the same tables, at the same time as per site transactions.
   // Even if the app server code is otherwise fine and bug free. It's a database thing.
   // So, don't use this for updating per-site things. Instead, create a site specific
@@ -383,28 +383,28 @@ class SystemDao(
 
   // ----- Spam
 
-  def loadStuffToSpamCheck(limit: Int): StuffToSpamCheck = {
+  def loadStuffToSpamCheck(limit: Int): immutable.Seq[SpamCheckTask] = {
     readOnlyTransaction { transaction =>
       transaction.loadStuffToSpamCheck(limit)
-    }
-  }
-
-  def deleteFromSpamCheckQueue(task: SpamCheckTask) {
-    dangerous_readWriteTransaction { transaction =>  // BUG tx race, rollback risk
-      transaction.deleteFromSpamCheckQueue(
-          task.siteId, postId = task.postId, postRevNr = task.postRevNr)
     }
   }
 
   // COULD move to SpamSiteDao, since now uses only a per site tx.
   //
   def dealWithSpam(spamCheckTask: SpamCheckTask, spamFoundResults: SpamFoundResults) {
+    val postToSpamCheck= spamCheckTask.postToSpamCheck getOrElse {
+      // Currently registration spam is checked directly when registering;
+      // we don't save anything to the database, and shouldn't find anything here later.
+      unimplemented("Delayed dealing with spam for things other than posts " +
+        "(i.e. registration spam?) [TyE295MKAR2]")
+    }
+
     // COULD if is new page, no replies, then hide the whole page (no point in showing a spam page).
     // Then mark section page stale below (4KWEBPF89).
     val sitePageIdToRefresh = globals.siteDao(spamCheckTask.siteId).readWriteTransaction {  // BUG tx race, rollback risk
           siteTransaction =>
 
-      val postBefore = siteTransaction.loadPost(spamCheckTask.postId) getOrElse {
+      val postBefore = siteTransaction.loadPost(postToSpamCheck.postId) getOrElse {
         // It was hard deleted?
         return
       }
@@ -472,6 +472,12 @@ class SystemDao(
   def deletePersonalDataFromOldAuditLogEntries() {
     dangerous_readWriteTransaction { tx =>  // BUG tx race, rollback risk
       tx.deletePersonalDataFromOldAuditLogEntries()
+    }
+  }
+
+  def deletePersonalDataFromOldSpamCheckTasks() {
+    dangerous_readWriteTransaction { tx =>  // BUG tx race, rollback risk
+      tx.deletePersonalDataFromOldSpamCheckTasks()
     }
   }
 

@@ -31,37 +31,42 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
   def insertSpamCheckTask(spamCheckTask: SpamCheckTask) {
     val statement = s"""
       insert into spam_check_queue3 (
-        action_at,
+        created_at,
         site_id,
         post_id,
+        post_nr,
         post_rev_nr,
-        posted_to_page_id,
+        page_id,
+        page_type,
         page_published_at,
-        post_content,
+        text_to_spam_check,
         language,
-        user_id,
+        uauthor_id,
         browser_id_cookie,
         browser_fingerprint,
         req_user_agent,
         req_referer,
         req_ip,
         req_uri,
-        user_name,
-        user_email,
-        user_trust_level,
-        user_url)
-      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        author_name,
+        author_email_addr,
+        author_trust_level,
+        author_url)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       -- probably not needed:
       on conflict (site_id, post_id, post_rev_nr) do nothing
       """
     val values = List(
       spamCheckTask.createdAt.asTimestamp,
       siteId.asAnyRef,
-      spamCheckTask.postToSpamCheck.map(_.postId).asAnyRef,
-      spamCheckTask.postToSpamCheck.map(_.postRevNr).asAnyRef,
-      spamCheckTask.postToSpamCheck.map(_.postedToPageId).asAnyRef,
+      spamCheckTask.postToSpamCheck.map(_.postId).orNullInt,
+      spamCheckTask.postToSpamCheck.map(_.postNr).orNullInt,
+      spamCheckTask.postToSpamCheck.map(_.postRevNr).orNullInt,
+      spamCheckTask.postToSpamCheck.map(_.pageId).orNullVarchar,
+      spamCheckTask.postToSpamCheck.map(_.pageType.toInt).orNullInt,
       spamCheckTask.postToSpamCheck.map(_.pagePublishedAt).orNullTimestamp,
-      spamCheckTask.postToSpamCheck.map(_.textToSpamCheck).orNullVarchar,
+      // There's a constraint, spamcheckqueue_c_texttospamcheck_len, 20200 chars. Maybe 15 000 enough?
+      spamCheckTask.postToSpamCheck.map(_.textToSpamCheck.take(15*1000)).orNullVarchar,
       spamCheckTask.postToSpamCheck.map(_.language).orNullVarchar,
       spamCheckTask.who.id.asAnyRef,
       spamCheckTask.who.idCookie.orNullVarchar,
@@ -101,7 +106,7 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
         results_text = ?,
         num_is_spam_results = ?,
         num_not_spam_results = ?,
-        human_thinks_is_spam = ?,
+        human_says_is_spam = ?,
         is_misclassified = ?,
         misclassifications_reported_at = ?
       where

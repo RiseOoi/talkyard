@@ -265,8 +265,12 @@ class SpamChecker(
         val akismetFuture: Future[SpamCheckResult] =
           if (!akismetEnabled) Future.successful(SpamCheckResult.NoSpam)
           else {
-            val akismetBody = makeAkismetRequestBody(spamCheckTask)
-            checkViaAkismet(akismetBody)
+            makeAkismetRequestBody(spamCheckTask) match {
+              case None =>
+                Future.successful(SpamCheckResult.NoSpam)
+              case Some(akismetBody) =>
+                checkViaAkismet(akismetBody)
+            }
           }
 
         Seq(stopForumSpamFuture, akismetFuture)
@@ -293,25 +297,16 @@ class SpamChecker(
   }
 
 
-  def detectPostSpam(spamCheckTask: SpamCheckTask, stuffToSpamCheck: StuffToSpamCheck)
-        : Future[SpamFoundResults] = {
-
+  def detectPostSpam(spamCheckTask: SpamCheckTask): Future[SpamFoundResults] = {
     if (!spamChecksEnabled)
       return Future.successful(Nil)
 
-    val post = stuffToSpamCheck.getPost(spamCheckTask.sitePostId) getOrElse {
-      // Apparently the post was hard deleted?
-      return Future.successful(Nil)
-    }
-
-    val user = stuffToSpamCheck.getUser(spamCheckTask.siteUserId) getOrElse {
-      // There's a foreign key + not-null constraint, so this is weird.
-      p.Logger.warn(s"User ${spamCheckTask.siteUserId} not found, skipping spam check [EdE3FK6YG1]")
+    val postToSpamCheck = spamCheckTask.postToSpamCheck getOrElse {
       return Future.successful(Nil)
     }
 
     COULD_OPTIMIZE // ? reuse post.approvedHtmlSanitized, if based on currentSource
-    val textAndHtml = textAndHtmlMaker.forBodyOrComment(post.currentSource)
+    val textAndHtml = textAndHtmlMaker.forBodyOrComment(postToSpamCheck.textToSpamCheck)
 
     val spamTestFutures: Seq[Future[SpamCheckResult]] =
       if (textAndHtml.text contains EdSpamMagicText) {
@@ -329,9 +324,11 @@ class SpamChecker(
 
         // Don't send the whole text, because of privacy issues. Send the links only. [4KTF0WCR]
         // Or yes do that?  dupl question [7KECW2]
-        val userIsABitTrusted = user.isStaff
+        val userIsNotNew = spamCheckTask.requestStuff.userTrustLevel.exists(
+          _.toInt >= TrustLevel.FullMember.toInt)
+
         val akismetFuture: Future[SpamCheckResult] =
-          if (userIsABitTrusted || !akismetEnabled) {
+          if (userIsNotNew || !akismetEnabled) {
             Future.successful(SpamCheckResult.NoSpam)
           }
           else {
@@ -361,12 +358,10 @@ class SpamChecker(
       SHOULD // insert into audit log (or some spam log?), gather stats, auto block.
 
       if (spamResults.nonEmpty) {
-        p.Logger.info(i"""Text spam detected [EdM8YKF0]:
-            | - client ip: ${spamCheckTask.who.ip}
-            | - user/guest name: ${user.usernameOrGuestName}
-            | - user email: ${user.email}
-            | - user id: ${user.id}
-            | - request uri: ${spamCheckTask.requestStuff.uri}
+        p.Logger.debug(i"""Text spam detected [TyM8YKF0]:
+            | - who: ${spamCheckTask.who}
+            | - post: ${postToSpamCheck}
+            | - req: ${spamCheckTask.requestStuff}
             | - siteId: ${spamCheckTask.siteId}
             |--- text: ---------------------------------------------------------
             |${textAndHtml.text}
@@ -842,7 +837,7 @@ class SpamChecker(
 
     // The permanent location of the entry the comment was submitted to.
     spamCheckTask.postToSpamCheck foreach { postToCheck =>
-      body.append("&permalink=" + encode(s"$siteOrigin/-${postToCheck.postedToPageId}"))
+      body.append("&permalink=" + encode(s"$siteOrigin/-${postToCheck.pageId}"))
     }
 
     // May be blank, comment, trackback, pingback, or a made up value like "registration".

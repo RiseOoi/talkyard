@@ -278,7 +278,7 @@ trait PagesDao {
               postId = bodyPost.id,
               postNr = bodyPost.nr,
               postRevNr = bodyPost.currentRevisionNr,
-              postedToPageId = pageMeta.pageId,
+              pageId = pageMeta.pageId,
               pageType = pageMeta.pageType,
               pagePublishedAt = When.fromDate(pageMeta.publishedAt getOrElse pageMeta.createdAt),
               textToSpamCheck = bodyHtmlSanitized,

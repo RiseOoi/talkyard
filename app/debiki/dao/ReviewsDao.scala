@@ -236,7 +236,8 @@ trait ReviewsDao {
     }
     val spamCheckTasksAnyRevNr: Seq[SpamCheckTask] = tx.loadPendingSpamCheckTasksForPost(postId)
     val spamCheckTasksSameRevNr =
-      spamCheckTasksAnyRevNr.filter(reviewTask.decidedAtRevNr is _.postRevNr)
+      spamCheckTasksAnyRevNr.filter(
+        reviewTask.decidedAtRevNr is _.postToSpamCheck.getOrDie("TyE20597W").postRevNr)
     spamCheckTasksSameRevNr foreach { spamCheckTask =>
       val taskWithHumanResult = spamCheckTask.copy(humanSaysIsSpam = Some(humanThinksIsSpam))
       // The Janitor thread will soon take a look at this spam check task, and
