@@ -70,8 +70,11 @@ class LoginAsGuestController @Inject()(cc: ControllerComponents, edContext: EdCo
       createdAt = globals.now(),
       siteId = request.siteId,
       postToSpamCheck = None,
-      who = request.who,
-      requestStuff = request.spamRelatedStuff)
+      who = request.whoOrUnknown,
+      requestStuff = request.spamRelatedStuff.copy(
+        userName = Some(name).noneIfBlank,
+        userEmail = Some(email).noneIfBlank,
+        userTrustLevel = None))
 
     globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
         spamFoundResults: SpamFoundResults =>

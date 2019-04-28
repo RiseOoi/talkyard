@@ -6,7 +6,7 @@ alter table spam_check_queue3 rename column action_at to created_at;
 alter table spam_check_queue3 drop column inserted_at;
 
 alter table spam_check_queue3 add column post_nr int;
-alter table spam_check_queue3 add column page_id int;
+alter table spam_check_queue3 add column page_id varchar;
 alter table spam_check_queue3 add column page_type int;
 alter table spam_check_queue3 add column page_published_at timestamp;
 alter table spam_check_queue3 add column author_name varchar;

@@ -172,8 +172,11 @@ class LoginWithPasswordController @Inject()(cc: ControllerComponents, edContext:
       createdAt = globals.now(),
       siteId = request.siteId,
       postToSpamCheck = None,
-      who = request.who,
-      requestStuff = request.spamRelatedStuff)
+      who = request.whoOrUnknown,
+      requestStuff = request.spamRelatedStuff.copy(
+        userName = Some(username),
+        userEmail = Some(emailAddress),
+        userTrustLevel = Some(TrustLevel.NewMember)))
 
     globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
           spamFoundResults: SpamFoundResults =>
