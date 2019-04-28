@@ -525,12 +525,6 @@ package object core {
     humanSaysIsSpam: Option[Boolean] = None,
     misclassificationsReportedAt: Option[When] = None) {
 
-    def key: SpamCheckTask.Key =
-      postToSpamCheck match {
-        case None => Right(siteUserId)
-        case Some(p) => Left((siteId, p.postId, p.postRevNr))
-      }
-
     require(resultAt.isDefined == resultJson.isDefined, "TyE4RBK6RS11")
     require(resultAt.isDefined == resultText.isDefined, "TyE4RBK6RS22")
     require(resultAt.isDefined == numIsSpamResults.isDefined, "TyE4RBK6RS33")
@@ -540,7 +534,17 @@ package object core {
     require((resultAt.isDefined && humanSaysIsSpam.isDefined) ||
       misclassificationsReportedAt.isEmpty, "TyE4RBK6RS55")
 
-    def sitePostId = SitePostId(siteId, postId)
+    def key: SpamCheckTask.Key =
+      postToSpamCheck match {
+        case None => Right(siteUserId)
+        case Some(p) => Left((siteId, p.postId, p.postRevNr))
+      }
+
+    def postToSpamCheckShort: Option[PostToSpamCheck] =
+      postToSpamCheck map { p =>
+        p.copy(textToSpamCheck = p.textToSpamCheck.take(1000))
+      }
+
     def siteUserId = SiteUserId(siteId, who.id)
 
     def isMisclassified: Option[Boolean] =

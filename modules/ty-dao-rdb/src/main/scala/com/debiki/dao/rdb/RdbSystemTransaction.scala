@@ -771,7 +771,7 @@ class RdbSystemTransaction(val daoFactory: RdbDaoFactory, val now: When)
     // that resulted in spam actually being found — since that can result in the author
     // getting auto blocked; then, can be good to know why that happened.
     val deleteMoreStatement = s"""
-      delete from spam_check_queue3 where
+      delete from spam_check_queue3
       where
         -- index: scq_actionat__i
         created_at < ?

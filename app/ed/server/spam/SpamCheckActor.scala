@@ -104,7 +104,7 @@ class SpamCheckActor(
       catch {
         case ex: Exception =>
           p.Logger.error(
-              s"Error dealing with spam, post id: ${spamCheckTask.sitePostId} [EdE7GSB4]", ex)
+              s"Error dealing with spam, post id: ${spamCheckTask.postToSpamCheckShort} [EdE7GSB4]", ex)
       }
     }
   }
