@@ -25,6 +25,7 @@ import debiki.EdHttp.throwForbidden
 import ed.server.http.DebikiRequest
 import java.{net => jn}
 import java.net.UnknownHostException
+import org.scalactic.{Bad, ErrorMessage, Good, Or}
 import play.{api => p}
 import play.api.libs.ws._
 import play.api.libs.json.{JsArray, JsObject, JsString, Json}
@@ -158,6 +159,7 @@ class SpamChecker(
   // All types: https://blog.akismet.com/2012/06/19/pro-tip-tell-us-your-comment_type/
   object AkismetSpamType {
     val Comment = "comment"
+    val Reply = "reply"
     val Pingback = "pingback"
     val Trackback = "trackback"
     val ForumPost = "forum-post" // forum posts and replies
@@ -165,11 +167,12 @@ class SpamChecker(
     val ContactForm = "contact-form" // contact forms, inquiry forms and the like
     val Signup = "signup" // account signup, registration or activation
     val Tweet = "tweet" // twitter messages
+    val Message = "message"
   }
 
   val SpamChecksEnabledConfValName = "talkyard.spamChecks.enabled"
 
-  private val spamChecksEnabled: Boolean = {
+  val spamChecksEnabled: Boolean = {
     val enabled = playConf.getOptional[Boolean](SpamChecksEnabledConfValName) getOrElse true
     if (!enabled) {
       play.api.Logger.info(s"Spam checks disabled; conf val $SpamChecksEnabledConfValName = false")
@@ -231,21 +234,21 @@ class SpamChecker(
   }
 
 
-  def detectRegistrationSpam(request: DebikiRequest[_], name: String, email: String)
-        : Future[SpamFoundResults] = {
+  def detectRegistrationSpam(spamCheckTask: SpamCheckTask): Future[SpamFoundResults] = {
+    require(spamCheckTask.postToSpamCheck.isEmpty, "TyE53RWE8")
 
     if (!spamChecksEnabled)
       return Future.successful(Nil)
 
     val spamTestFutures: Seq[Future[SpamCheckResult]] =
-      if (name contains EdSpamMagicText) {
+      if (spamCheckTask.requestStuff.userName contains EdSpamMagicText) {
         Seq(Future.successful(SpamCheckResult.SpamFound(
           modsMayUnhide = true,
           spamCheckerDomain = "localhost",
           humanReadableMessage =
             s"Name contains test spam text: '$EdSpamMagicText' [EdM5KSWU7]")))
       }
-      else if (email contains EdSpamMagicText) {
+      else if (spamCheckTask.requestStuff.userEmail contains EdSpamMagicText) {
         Seq(Future.successful(SpamCheckResult.SpamFound(
           modsMayUnhide = true,
           spamCheckerDomain = "localhost",
@@ -256,15 +259,13 @@ class SpamChecker(
         val stopForumSpamFuture: Future[SpamCheckResult] =
           if (!stopForumSpamEnabled) Future.successful(SpamCheckResult.NoSpam)
           else {
-            checkViaStopForumSpam(request, name, email)
+            checkViaStopForumSpam(spamCheckTask)
           }
 
         val akismetFuture: Future[SpamCheckResult] =
           if (!akismetEnabled) Future.successful(SpamCheckResult.NoSpam)
           else {
-            val akismetBody = makeAkismetRequestBody(AkismetSpamType.Signup,
-              request.origin, request.theBrowserIdData, request.spamRelatedStuff,
-              user = None, anyName = Some(name), anyEmail = Some(email))
+            val akismetBody = makeAkismetRequestBody(spamCheckTask)
             checkViaAkismet(akismetBody)
           }
 
@@ -281,11 +282,7 @@ class SpamChecker(
 
       if (spamResults.nonEmpty) {
         p.Logger.info(i"""Registration spam detected: [EdM4FK0W2]
-            | - client ip: ${request.ip}
-            | - user/guest name: $name
-            | - user email: $email
-            | - request uri: ${request.uri}
-            | - site: ${request.siteId} == ${request.domain}
+            | $spamCheckTask
             |""")
         spamResults foreach { spamReason =>
           p.Logger.info(s"Spam reason [EdM5GKP0R]: $spamReason")
@@ -343,14 +340,12 @@ class SpamChecker(
                 p.Logger.warn(s"Site not found: ${spamCheckTask.siteId} [TyE5KA2Y8]")
                 successful(SpamCheckResult.NoSpam)
               case Some(siteOrigin) =>
-                val payload = makeAkismetRequestBody(
-                  AkismetSpamType.ForumPost,
-                  siteOrigin = siteOrigin,
-                  spamCheckTask.who.browserIdData,
-                  spamCheckTask.requestStuff,
-                  text = Some(textAndHtml.safeHtml), // COULD: htmlLinksOnePerLine [4KTF0WCR]
-                  user = Some(user))
-                checkViaAkismet(payload)
+                makeAkismetRequestBody(spamCheckTask) match {
+                  case None =>
+                    successful(SpamCheckResult.NoSpam)
+                  case Some(payload) =>
+                    checkViaAkismet(payload)
+                }
             }
           }
 
@@ -387,14 +382,14 @@ class SpamChecker(
 
   val StopForumSpamDomain = "www.stopforumspam.com"
 
-  def checkViaStopForumSpam(request: DebikiRequest[_], name: String, email: String)
-        : Future[SpamCheckResult] = {
+  def checkViaStopForumSpam(spamCheckTask: SpamCheckTask): Future[SpamCheckResult] = {
     // StopForumSpam doesn't support ipv6.
     // See: https://www.stopforumspam.com/forum/viewtopic.php?id=6392
+    val ipAddr = spamCheckTask.who.ip
     val anyIpParam =
-      if (request.ip.startsWith("[") || request.ip.contains(":")) ""
-      else  "&ip=" + encode(request.ip)
-    val encodedEmail = encode(email)
+      if (ipAddr.startsWith("[") || ipAddr.contains(":")) ""
+      else  "&ip=" + encode(ipAddr)
+    val encodedEmail = encode(spamCheckTask.requestStuff.userEmail getOrElse "")
     wsClient.url(s"https://$StopForumSpamDomain/api?email=$encodedEmail$anyIpParam&f=json").get()
       .map(handleStopForumSpamResponse)
       .recover({
@@ -787,21 +782,40 @@ class SpamChecker(
   }
 
 
-  private def makeAkismetRequestBody(tyype: String, siteOrigin: String,
+  private def makeAkismetRequestBody(spamCheckTask: SpamCheckTask) /*siteOrigin: String,
       browserIdData: BrowserIdData,
       spamRelatedStuff: SpamRelReqStuff,
       pageId: Option[PageId] = None, text: Option[String] = None, user: Option[Participant],
-      anyName: Option[String] = None, anyEmail: Option[String] = None): String = {
+      anyName: Option[String] = None, anyEmail: Option[String] = None)*/: Option[String] = {
+
+    val akismetContentType =
+      spamCheckTask.postToSpamCheck match {
+        case None => AkismetSpamType.Signup
+        case Some(postToSpamCheck) =>
+          val pageType = postToSpamCheck.pageType
+          if (pageType.isPrivateGroupTalk) AkismetSpamType.Message
+          else if (PageParts.isArticleOrTitlePostNr(postToSpamCheck.postNr)) {
+            if (pageType == PageType.Blog) AkismetSpamType.BlogPost
+            else AkismetSpamType.ForumPost
+          }
+          else if (pageType == PageType.EmbeddedComments) AkismetSpamType.Comment
+          else if (pageType == PageType.Form) AkismetSpamType.ContactForm
+          else AkismetSpamType.Reply
+      }
 
     // Either 1) the user is known, or 2) we're creating a new site or user — then
     // only name & email known.
-    dieIf(anyEmail.isDefined != anyName.isDefined, "EdE6GTB20")
-    dieIf(anyEmail.isDefined == user.isDefined, "EdE2PW2U4")
+    //dieIf(anyEmail.isDefined != anyName.isDefined, "EdE6GTB20")
+    //dieIf(anyEmail.isDefined == user.isDefined, "EdE2PW2U4")
     dieIf(anyAkismetKey.isEmpty, "Akismet API key is empty [TyM4GLU8]")
-    def theUser = user getOrDie "TyE5PD72RA"
+    //def theUser = user getOrDie "TyE5PD72RA"
 
 
     val body = new StringBuilder()
+    val siteOrigin = originOfSiteId(spamCheckTask.siteId) getOrElse {
+      p.Logger.warn(s"Cannot do spam check, site ${spamCheckTask.siteId} not found [Ty6MBR25]")
+      return None
+    }
 
     // Documentation: https://akismet.com/development/api/#comment-check
 
@@ -811,53 +825,57 @@ class SpamChecker(
     body.append("blog=" + encode(siteOrigin))
 
     // (required) IP address of the comment submitter.
-    body.append("&user_ip=" + encode(browserIdData.ip))
+    body.append("&user_ip=" + encode(spamCheckTask.who.ip))
 
     // (required) User agent string of the web browser submitting the comment - typically
     // the HTTP_USER_AGENT cgi variable. Not to be confused with the user agent
     // of your Akismet library.
-    val browserUserAgent = spamRelatedStuff.userAgent getOrElse "Unknown"
+    val browserUserAgent = spamCheckTask.requestStuff.userAgent getOrElse "Unknown"
     body.append("&user_agent=" + encode(browserUserAgent))
 
     // The content of the HTTP_REFERER header should be sent here.
-    spamRelatedStuff.referer foreach { referer =>
+    spamCheckTask.requestStuff.referer foreach { referer =>
       // Should be 2 'r' in "referrer" below,
       // see: https://akismet.com/development/api/#comment-check
       body.append("&referrer=" + encode(referer))
     }
 
-    /*
     // The permanent location of the entry the comment was submitted to.
-    pageId foreach { id =>
-      body.append("&permalink=" + encode(request.origin + "/-" + id))
-    } */
+    spamCheckTask.postToSpamCheck foreach { postToCheck =>
+      body.append("&permalink=" + encode(s"$siteOrigin/-${postToCheck.postedToPageId}"))
+    }
 
     // May be blank, comment, trackback, pingback, or a made up value like "registration".
     // It's important to send an appropriate value, and this is further explained here.
-    body.append("&comment_type=" + tyype)
+    body.append("&comment_type=" + akismetContentType)
+
+    val anyTextToCheck = spamCheckTask.postToSpamCheck.map(_.textToSpamCheck)
 
     // Name submitted with the comment.
-    val theName =
-      if (text.exists(_ contains AlwaysSpamMagicText)) {
-        AkismetAlwaysSpamName
+    val authorName =
+      if (anyTextToCheck.exists(_ contains AlwaysSpamMagicText)) {
+        Some(AkismetAlwaysSpamName)
       }
-      else anyName getOrElse {
-        // Check both the username and the full name, by combining them.
-        theUser.anyUsername.map(_ + " ").getOrElse("") + theUser.anyName.getOrElse("")
+      else {
+        spamCheckTask.requestStuff.userName
       }
-    body.append("&comment_author=" + encode(theName))
+
+    authorName foreach { theName =>
+      body.append("&comment_author=" + encode(theName))
+    }
 
     // Email address submitted with the comment.
-    val theEmail = anyEmail getOrElse theUser.email
-    body.append("&comment_author_email=" + encode(theEmail)) // TODO email inclusion configurable
+    spamCheckTask.requestStuff.userEmail foreach { theEmail =>
+      body.append("&comment_author_email=" + encode(theEmail)) // COULD email inclusion configurable
+    }
 
     // URL submitted with comment.
     //comment_author_url (not supported)
 
     // The content that was submitted.
-    text foreach { t =>
+    anyTextToCheck foreach { t =>
       if (t.nonEmpty)
-        body.append("&comment_content=" + encode(t))
+        body.append("&comment_content=" + encode(t))  // COULD: htmlLinksOnePerLine [4KTF0WCR]
     }
 
     // The UTC timestamp of the creation of the comment, in ISO 8601 format. May be
@@ -886,7 +904,7 @@ class SpamChecker(
       body.append("&is_test=true")
     }
 
-    body.toString()
+    Some(body.toString())
   }
 
 
@@ -901,11 +919,13 @@ class SpamChecker(
     akismetKeyIsValidPromise.future onComplete {
       case Success(true) =>
         //https://your-api-key.rest.akismet.com/1.1/submit-spam
-        val akismetBody = makeAkismetRequestBody(AkismetSpamType.Signup,
-          origin, spamCheckTask.who.browserIdData, spamCheckTask.requestStuff,
-          user = None, anyName = spamCheckTask.anyName, anyEmail = spamCheckTask.anyEmail)
-        checkViaAkismet(akismetBody)
-        promise.success(true)
+        makeAkismetRequestBody(spamCheckTask) match {
+          case None =>
+            promise.success(false)
+          case Some(akismetBody) =>
+            checkViaAkismet(akismetBody)
+            promise.success(true)
+        }
       case _ =>
         promise.success(false)
     }

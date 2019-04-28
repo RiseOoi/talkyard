@@ -423,7 +423,7 @@ class SystemDao(
       siteTransaction.updatePost(postAfter)
 
       // Add the spam check results from the spam check service, and ...
-      siteTransaction.updateSpamCheckTaskWithResults(spamCheckTask)
+      siteTransaction.updateSpamCheckTaskForPostWithResults(spamCheckTask)
 
       // ... add a review task, so a human will check this out. When hen has
       // done that, we'll hide or show the post, if needed, and, if the human
@@ -505,7 +505,7 @@ class SystemDao(
       val siteDao = globals.siteDao(task.siteId)
       val taskDone = task.copy(misclassificationsReportedAt = Some(globals.now))
       siteDao.readWriteTransaction { tx =>
-        tx.updateSpamCheckTaskWithResults(taskDone)
+        tx.updateSpamCheckTaskForPostWithResults(taskDone)
       }
     }
   }

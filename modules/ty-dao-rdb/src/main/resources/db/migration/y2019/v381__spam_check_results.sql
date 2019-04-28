@@ -3,12 +3,25 @@ delete from spam_check_queue3;
 
 alter table spam_check_queue3 add column posted_to_page_id int;
 alter table spam_check_queue3 add column page_published_at timestamp;
-alter table spam_check_queue3 add column user_name string;
-alter table spam_check_queue3 add column user_email string;
+alter table spam_check_queue3 add column user_name varchar;  -- rename to author_name
+alter table spam_check_queue3 add column user_email varchar;  -- rename to author_email_addr
 alter table spam_check_queue3 add column user_trust_level int;
-alter table spam_check_queue3 add column user_url string;
-alter table spam_check_queue3 add column post_content string;
-alter table spam_check_queue3 add column language string;
+alter table spam_check_queue3 add column user_url varchar;
+alter table spam_check_queue3 add column text_to_spam_check varchar;
+alter table spam_check_queue3 add column language varchar;
+
+alter table spam_check_queue3 add constraint spamcheckqueue_c_username_len check (
+    length(user_name) between 1 and 10100);
+
+alter table spam_check_queue3 add constraint spamcheckqueue_c_useremailaddr_len check (
+    length(user_email) between 1 and 10100);
+
+alter table spam_check_queue3 add constraint spamcheckqueue_c_userurl_len check (
+    length(user_url) between 1 and 10100);
+
+alter table spam_check_queue3 add constraint spamcheckqueue_c_userurl_len check (
+    length(text_to_spam_check) between 1 and 10100);
+
 
 alter table spam_check_queue3 add column results_at timestamp;
 alter table spam_check_queue3 add column results_json jsonb;

@@ -301,7 +301,8 @@ package object core {
   def FirstSiteId: SiteId = Site.FirstSiteId
   val NoUserId = 0
   def SystemUserId: UserId = Participant.SystemUserId
-  def SystemSpamStuff = SpamRelReqStuff(userAgent = None, referer = None, uri = "/dummy")
+  def SystemSpamStuff = SpamRelReqStuff(userAgent = None, referer = None, uri = "/dummy",
+    userName = None, userEmail = None, userUrl = None, userTrustLevel = None)
   def SystemUserFullName: String = Participant.SystemUserFullName
   def SystemUserUsername: String = Participant.SystemUserUsername
   def SysbotUserId: UserId = Participant.SysbotUserId
@@ -478,8 +479,17 @@ package object core {
     userName: Option[String],
     userEmail: Option[String],
     userUrl: Option[String],
-    userTrustLevel: Option[TrustLevel],
-  )
+    userTrustLevel: Option[TrustLevel])
+
+  case class PostToSpamCheck(
+    postId: PostId,
+    postNr: PostNr,
+    postRevNr: Int,
+    postedToPageId: PageId,  // RENAME to pageId
+    pageType: PageType,
+    pagePublishedAt: When,
+    textToSpamCheck: String,
+    language: String)
 
 
   /** Primary key = site id, post id and also pots revision nr, so that if
@@ -504,21 +514,16 @@ package object core {
   case class SpamCheckTask(
     createdAt: When,
     siteId: SiteId,
-    postId: PostId,
-    postRevNr: Int,
-    postedToPageId: PageId,
-    pagePublishedAt: When,
+    postToSpamCheck: Option[PostToSpamCheck],
     who: Who,
     requestStuff: SpamRelReqStuff,
-    textToSpamCheck: Option[String],
-    language: Option[String],
     resultAt: Option[When] = None,
     resultJson: Option[JsObject] = None,
     resultText: Option[String] = None,
-    numIsSpamResults: Option[Int],
-    numNotSpamResults: Option[Int],
-    humanSaysIsSpam: Option[Boolean],
-    misclassificationsReportedAt: Option[When]) {
+    numIsSpamResults: Option[Int] = None,
+    numNotSpamResults: Option[Int] = None,
+    humanSaysIsSpam: Option[Boolean] = None,
+    misclassificationsReportedAt: Option[When] = None) {
 
     require(resultAt.isDefined == resultJson.isDefined, "TyE4RBK6RS11")
     require(resultAt.isDefined == resultText.isDefined, "TyE4RBK6RS22")

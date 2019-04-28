@@ -18,6 +18,7 @@
 package com.debiki.dao.rdb
 
 import com.debiki.core._
+import com.debiki.core.Prelude._
 import Rdb._
 import scala.collection.immutable
 
@@ -27,14 +28,7 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
   self: RdbSiteTransaction =>
 
 
-  def spamCheckPostsSoon(byWho: Who, spamRelReqStuff: SpamRelReqStuff, posts: Post*) {
-    posts.foreach(enqueuePost(byWho, spamRelReqStuff, _))
-  }
-
-
-  private def enqueuePost(byWho: Who, spamRelReqStuff: SpamRelReqStuff, post: Post) {
-    val languageCode = loadSiteSettings().flatMap(_.languageCode)
-    val pageMeta = loadThePageMeta(post.pageId)
+  def insertSpamCheckTask(spamCheckTask: SpamCheckTask) {
     val statement = s"""
       insert into spam_check_queue3 (
         action_at,
@@ -43,6 +37,8 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
         post_rev_nr,
         posted_to_page_id,
         page_published_at,
+        post_content,
+        language,
         user_id,
         browser_id_cookie,
         browser_fingerprint,
@@ -53,34 +49,31 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
         user_name,
         user_email,
         user_trust_level,
-        user_url,
-        post_content,
-        language)
+        user_url)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       -- probably not needed:
       on conflict (site_id, post_id, post_rev_nr) do nothing
       """
-    val createdAt = post.currentRevLastEditedAt.getOrElse(post.createdAt)
     val values = List(
-      createdAt,
+      spamCheckTask.createdAt.asTimestamp,
       siteId.asAnyRef,
-      post.id.asAnyRef,
-      post.currentRevisionNr.asAnyRef,
-      post.pageId.asAnyRef,
-      pageMeta.publishedAt.orNullTimestamp,
-      byWho.id.asAnyRef,
-      byWho.idCookie.orNullVarchar,
-      byWho.browserFingerprint.asAnyRef,
-      spamRelReqStuff.userAgent.orNullVarchar,
-      spamRelReqStuff.referer.orNullVarchar,
-      byWho.ip,
-      spamRelReqStuff.uri,
-      spamRelReqStuff.userName,
-      spamRelReqStuff.userEmail,
-      spamRelReqStuff.userTrustLevel.map(_.toInt).orNullInt,
-      spamRelReqStuff.userUrl.orNullVarchar,
-      post.currentSource,
-      languageCode.orNullVarchar)
+      spamCheckTask.postToSpamCheck.map(_.postId).asAnyRef,
+      spamCheckTask.postToSpamCheck.map(_.postRevNr).asAnyRef,
+      spamCheckTask.postToSpamCheck.map(_.postedToPageId).asAnyRef,
+      spamCheckTask.postToSpamCheck.map(_.pagePublishedAt).orNullTimestamp,
+      spamCheckTask.postToSpamCheck.map(_.textToSpamCheck).orNullVarchar,
+      spamCheckTask.postToSpamCheck.map(_.language).orNullVarchar,
+      spamCheckTask.who.id.asAnyRef,
+      spamCheckTask.who.idCookie.orNullVarchar,
+      spamCheckTask.who.browserFingerprint.asAnyRef,
+      spamCheckTask.requestStuff.userAgent.orNullVarchar,
+      spamCheckTask.requestStuff.referer.orNullVarchar,
+      spamCheckTask.who.ip,
+      spamCheckTask.requestStuff.uri,
+      spamCheckTask.requestStuff.userName.orNullVarchar,
+      spamCheckTask.requestStuff.userEmail.orNullVarchar,
+      spamCheckTask.requestStuff.userTrustLevel.map(_.toInt).orNullInt,
+      spamCheckTask.requestStuff.userUrl.orNullVarchar)
 
     runUpdateSingleRow(statement, values)
   }
@@ -99,7 +92,8 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
   }
 
 
-  def updateSpamCheckTaskWithResults(spamCheckTask: SpamCheckTask) {
+  def updateSpamCheckTaskForPostWithResults(spamCheckTask: SpamCheckTask) {
+    val postToSpamCheck = spamCheckTask.postToSpamCheck.getOrDie("TyE60TQL2")
     val statement = """
       update spam_check_queue3 set
         results_at = ?,
@@ -125,8 +119,8 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
       spamCheckTask.isMisclassified.orNullBoolean,
       spamCheckTask.misclassificationsReportedAt.orNullTimestamp,
       spamCheckTask.siteId.asAnyRef,
-      spamCheckTask.postId.asAnyRef,
-      spamCheckTask.postRevNr.asAnyRef)
+      postToSpamCheck.postId.asAnyRef,
+      postToSpamCheck.postRevNr.asAnyRef)
     runUpdateSingleRow(statement, values)
   }
 

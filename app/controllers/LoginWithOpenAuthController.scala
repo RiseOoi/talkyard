@@ -620,7 +620,14 @@ class LoginWithOpenAuthController @Inject()(cc: ControllerComponents, edContext:
     if (ed.server.security.ReservedNames.isUsernameReserved(username)) // [5LKKWA10]
       throwForbidden("EdE4SWWB9", s"Username is reserved: '$username'; choose another username")
 
-    globals.spamChecker.detectRegistrationSpam(request, name = username, email = emailAddress) map {
+    val spamCheckTask = SpamCheckTask(
+      createdAt = globals.now(),
+      siteId = request.siteId,
+      postToSpamCheck = None,
+      who = request.who,
+      requestStuff = request.spamRelatedStuff)
+
+    globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
           spamFoundResults: SpamFoundResults =>
       SpamChecker.throwForbiddenIfSpam(spamFoundResults, "TyE2AKF067")
 

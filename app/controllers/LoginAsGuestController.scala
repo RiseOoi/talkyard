@@ -66,7 +66,14 @@ class LoginAsGuestController @Inject()(cc: ControllerComponents, edContext: EdCo
     val theBrowserId: String = request.theBrowserIdData.idCookie getOrElse throwForbidden(
       "TyE0BRIDGST", "Browser id missing when logging in as guest")
 
-    globals.spamChecker.detectRegistrationSpam(request, name = name, email = email) map {
+    val spamCheckTask = SpamCheckTask(
+      createdAt = globals.now(),
+      siteId = request.siteId,
+      postToSpamCheck = None,
+      who = request.who,
+      requestStuff = request.spamRelatedStuff)
+
+    globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
         spamFoundResults: SpamFoundResults =>
       SpamChecker.throwForbiddenIfSpam(spamFoundResults, "EdE5KJU3_")
 

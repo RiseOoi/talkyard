@@ -242,7 +242,7 @@ trait ReviewsDao {
       // The Janitor thread will soon take a look at this spam check task, and
       // report any classification error (spam detected, but human says isn't spam, or vice versa)
       // to the spam check service. [SPMSCLRPT]
-      tx.updateSpamCheckTaskWithResults(taskWithHumanResult)
+      tx.updateSpamCheckTaskForPostWithResults(taskWithHumanResult)
     }
   }
 
