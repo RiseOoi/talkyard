@@ -25,6 +25,7 @@ import debiki.EdHttp.throwForbidden
 import scala.collection.{immutable, mutable}
 import SystemDao._
 import debiki.Globals
+import play.api.libs.json.{JsObject, Json}
 
 
 class NumSites(val byYou: Int, val total: Int)
@@ -391,18 +392,37 @@ class SystemDao(
 
   // COULD move to SpamSiteDao, since now uses only a per site tx.
   //
-  def dealWithSpam(spamCheckTask: SpamCheckTask, spamFoundResults: SpamFoundResults) {
-    val postToSpamCheck= spamCheckTask.postToSpamCheck getOrElse {
+  def dealWithSpam(spamCheckTaskNoResults: SpamCheckTask, spamFoundResults: SpamFoundResults) {
+    val postToSpamCheck= spamCheckTaskNoResults.postToSpamCheck getOrElse {
       // Currently registration spam is checked directly when registering;
       // we don't save anything to the database, and shouldn't find anything here later.
       unimplemented("Delayed dealing with spam for things other than posts " +
         "(i.e. registration spam?) [TyE295MKAR2]")
     }
 
+    val spamCheckTaskWithResults: SpamCheckTask = spamCheckTaskNoResults.copy(
+      resultAt = Some(globals.now),
+      resultJson = Some(JsObject(
+        spamFoundResults.map(r =>
+          r.spamCheckerDomain -> Json.obj(
+            "modsMayUnhide" -> r.modsMayUnhide)))),
+      resultText = Some(spamFoundResults.map(r => i"""
+        |${r.spamCheckerDomain}:
+        |${r.humanReadableMessage}""").mkString("\n-----\n").trim),
+      numIsSpamResults = Some(spamFoundResults.length),
+      numNotSpamResults = Some(0)) // ?? need to count # external serviced queried, in SpamChecker
+
     // COULD if is new page, no replies, then hide the whole page (no point in showing a spam page).
     // Then mark section page stale below (4KWEBPF89).
-    val sitePageIdToRefresh = globals.siteDao(spamCheckTask.siteId).readWriteTransaction {  // BUG tx race, rollback risk
+    val sitePageIdToRefresh = globals.siteDao(spamCheckTaskWithResults.siteId).readWriteTransaction {
           siteTransaction =>
+
+      // Add the spam check results from the spam check service, so we won't re-check
+      // this again and again.
+      siteTransaction.updateSpamCheckTaskForPostWithResults(spamCheckTaskWithResults)
+
+      if (spamFoundResults.isEmpty)
+        return
 
       val postBefore = siteTransaction.loadPost(postToSpamCheck.postId) getOrElse {
         // It was hard deleted?
@@ -416,16 +436,13 @@ class SystemDao(
           s"Is spam or malware?:\n\n" +
           spamFoundResults.mkString("\n\n")))
 
-      val reviewTask = PostsDao.createOrAmendOldReviewTask(
+      val reviewTask: ReviewTask = PostsDao.createOrAmendOldReviewTask(
         createdById = SystemUserId, postAfter, reasons = Vector(ReviewReason.PostIsSpam),
-        siteTransaction): ReviewTask
+        siteTransaction)
 
       siteTransaction.updatePost(postAfter)
 
-      // Add the spam check results from the spam check service, and ...
-      siteTransaction.updateSpamCheckTaskForPostWithResults(spamCheckTask)
-
-      // ... add a review task, so a human will check this out. When hen has
+      // Add a review task, so a human will check this out. When hen has
       // done that, we'll hide or show the post, if needed, and, if the human
       // disagrees with the spam check service, we'll tell the spam check service
       // that it did a mistake. [SPMSCLRPT]
@@ -457,7 +474,7 @@ class SystemDao(
         // popularity updated "at once", the server won't go crazy and spike the CPU. Instead,
         // it'll look at the pages one at a time, when it has some CPU to spare.
 
-        Some(SitePageId(spamCheckTask.siteId, postAfter.pageId))
+        Some(SitePageId(spamCheckTaskWithResults.siteId, postAfter.pageId))
       }
       else
         None

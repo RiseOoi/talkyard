@@ -1034,7 +1034,8 @@ class Globals(
           elasticSearchClient, actorSystem, systemDao))
 
     def spamCheckBatchSize: Int = conf.getInt("talkyard.spamcheck.batchSize") getOrElse 20
-    def spamCheckIntervalSeconds: Int = conf.getInt("talkyard.spamcheck.intervalSeconds") getOrElse 1
+    def spamCheckIntervalSeconds: Int = conf.getInt("talkyard.spamcheck.intervalSeconds").getOrElse(
+      if (isOrWasTest) 1 else 3)
 
     val spamCheckActorRef: Option[ActorRef] =
       if (isTestDisableBackgroundJobs) None

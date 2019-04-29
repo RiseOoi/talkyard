@@ -1189,6 +1189,7 @@ trait PostsDao {
     throwIfMayNotSeePage(page, Some(user))(tx)
 
     val postBefore = page.parts.thePostByNr(postNr)
+    lazy val postAuthor = tx.loadTheParticipant(postBefore.createdById)
 
     // Authorization.
     if (!user.isStaff) {
@@ -1322,6 +1323,29 @@ trait PostsDao {
       val taskPostId = task.postId getOrDie "TyE6KWA2C"
       invalidateReviewTasksForPosts(postsDeleted.filter(_.id == taskPostId), doingReviewTask, tx)
       reactivateReviewTasksForPosts(postsUndeleted.filter(_.id == taskPostId), doingReviewTask, tx)
+    }
+
+    // If this post is getting deleted because it's spam, then, update any [UPDSPTSK]
+    // pending spam check task, so we can send a training sample to any spam check services.
+    // [DELSPAM] Would be good with a separate Delete button, to indicate if one deletes
+    // this post because it's spam. So we know for sure.
+    // For now: If this post was detected as spam, and is getting deleted by staff,
+    // assume it's spam.
+    // (Tricky tricky: Looking at the post author won't work, for wiki posts, if
+    // a user other than the author, edited the wiki post and inserted spam.
+    // Then we should instead compare with the last editor (or all/recent editors).
+    // But how do we know if the one who inserted any spam, is the last editor,
+    // or the original author? Ignore this, for now. [WIKISPAM])
+    val maybeDeletingSpam = user.isStaff && !postAuthor.isStaff && user.id != postAuthor.id
+    if (maybeDeletingSpam) {  //  && anyDeleteReason is DeleteReasons.IsSpam) {
+      val spamCheckTasksAnyRevNr = tx.loadPendingSpamCheckTasksForPost(postBefore.id)
+      val spamCheckTaskSameRevNr =
+        spamCheckTasksAnyRevNr.filter(
+          postBefore.approvedRevisionNr is _.postToSpamCheck.getOrDie("TyE529KMW").postRevNr)
+      spamCheckTaskSameRevNr foreach { task =>
+        val taskWithHumanResult = task.copy(humanSaysIsSpam = Some(true))
+        tx.updateSpamCheckTaskForPostWithResults(taskWithHumanResult)
+      }
     }
 
     // COULD update database to fix this. (Previously, chat pages didn't count num-chat-messages.)

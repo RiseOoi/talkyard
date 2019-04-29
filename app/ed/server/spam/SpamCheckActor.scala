@@ -83,6 +83,7 @@ class SpamCheckActor(
 
   private def checkMorePostsForSpam() {
     val spamCheckTasks = systemDao.loadStuffToSpamCheck(limit = batchSize)
+    p.Logger.debug(s"Checking ${spamCheckTasks.length} spam check tasks ... [TyM70295MA4]")
     spamCheckTasks foreach { task =>
       val key = task.key
       if (checkingNowCache.getIfPresent(key) eq null) {
@@ -104,7 +105,7 @@ class SpamCheckActor(
       catch {
         case ex: Exception =>
           p.Logger.error(
-              s"Error dealing with spam, post id: ${spamCheckTask.postToSpamCheckShort} [EdE7GSB4]", ex)
+              s"Error dealing with spam, post: ${spamCheckTask.postToSpamCheckShort} [EdE7GSB4]", ex)
       }
     }
   }

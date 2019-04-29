@@ -363,12 +363,13 @@ class SpamChecker(
             | - post: ${postToSpamCheck}
             | - req: ${spamCheckTask.requestStuff}
             | - siteId: ${spamCheckTask.siteId}
-            |--- text: ---------------------------------------------------------
-            |${textAndHtml.text}
-            |--- /end text -----------------------------------------------------""")
-        spamResults foreach { spamReason =>
-          p.Logger.info(s"Spam reason [EdM2KPF8]: $spamReason")
-        }
+            |----- text:
+            |${textAndHtml.text.trim}
+            |----- /end text
+            |----- spam reasons:
+            |${spamResults.map(_.toString).mkString("\n").trim}
+            |----- /end spam reasons
+            | """)
       }
       spamResults
     }

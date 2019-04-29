@@ -178,8 +178,10 @@ trait ReviewsDao {
         }
 
         // Currently review tasks don't always get invalidated, when posts and pages get deleted. (2KYF5A)
-        if (post.deletedAt.isDefined)
+        if (post.deletedAt.isDefined) {
+          // Any spam check task should have been updated already, here: [UPDSPTSK].
           return
+        }
 
         pageIdsToRefresh.add(post.pageId)
 
@@ -238,6 +240,10 @@ trait ReviewsDao {
     val spamCheckTasksSameRevNr =
       spamCheckTasksAnyRevNr.filter(
         reviewTask.decidedAtRevNr is _.postToSpamCheck.getOrDie("TyE20597W").postRevNr)
+
+    // How do we know the spam was really inserted in this post revision? What if this is
+    // a wiki post, and a previous editor inserted the spam? Ignore, for now. [WIKISPAM]
+
     spamCheckTasksSameRevNr foreach { spamCheckTask =>
       val taskWithHumanResult = spamCheckTask.copy(humanSaysIsSpam = Some(humanThinksIsSpam))
       // The Janitor thread will soon take a look at this spam check task, and
