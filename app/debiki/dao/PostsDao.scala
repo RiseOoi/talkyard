@@ -339,8 +339,26 @@ trait PostsDao {
       return (Nil, true)
     }
 
+    // If too many recent review tasks about maybe-spam are already pending,
+    // don't let this new user post anything more, until staff has had a look.
+    if (author.trustLevel.toInt < TrustLevel.FullMember.toInt) {
+      val numMaybeSpam = reviewTasksRecentFirst.count(t =>
+        t.reasons.contains(ReviewReason.PostIsSpam) && t.decision.isEmpty)
+
+      val numWasNotSpam = reviewTasksRecentFirst.count(t =>
+        t.reasons.contains(ReviewReason.PostIsSpam) && t.decision.exists(_.isFine))
+
+      val numYesSpam = reviewTasksRecentFirst.count(t =>
+        t.reasons.contains(ReviewReason.PostIsSpam) && t.decision.exists(_.isRejectionBadUser))
+
+      if (numMaybeSpam >= AllSettings.MaxPendingMaybeSpamPosts && numYesSpam >= numWasNotSpam)
+        throwForbidden("TyENEWMBRSPM_", o"""You cannot post more posts until a moderator
+          has reviewed your previous posts.""" + "\n\n" + o"""Our spam detection system thinks
+          some of your posts look like spam, sorry.""")
+    }
+
     val settings = loadWholeSiteSettings(tx)
-    var numFirstToAllow = math.min(MaxNumFirstPosts, settings.numFirstPostsToAllow)
+    val numFirstToAllow = math.min(MaxNumFirstPosts, settings.numFirstPostsToAllow)
     val numFirstToApprove = math.min(MaxNumFirstPosts, settings.numFirstPostsToApprove)
     var numFirstToNotify = math.min(MaxNumFirstPosts, settings.numFirstPostsToReview)
 
@@ -350,40 +368,19 @@ trait PostsDao {
       numFirstToNotify = 2 - numFirstToApprove
     }
 
-    lazy val numReviewTasksApproved = reviewTasksOldestFirst.count(_.decision.exists(_.isFine))
-    lazy val numReviewTasksLoaded = reviewTasksOldestFirst.length
-
-    // !!!!!!!!!!! oops won't work, because haven't yet detected any spam,
-    // that's not done until later, SpamCheckActor.
-    // Yes will work, because we lookup *old* reviews reasons.
-    if (author.trustLevel.toInt < TrustLevel.FullMember.toInt) {
-      // This is a fairly new member, maybe a spammer? If a few of hens posts have
-      // been classified as spam, block hen from posting anything more, until
-      // staff has reviewed.
-      val numMaybeSpam = reviewTasksOldestFirst.count(t =>
-        t.reasons.contains(ReviewReason.PostIsSpam) && !t.decision.exists(_.isFine))
-      if (numMaybeSpam >= 3 && numMaybeSpam >= numReviewTasksApproved)
-        throwForbidden("TyENEWMBRSPM", o"""You cannot post more posts until a moderator has
-            reviewed your previous posts""")
-    }
-
-    /*
-    import AllSettings.{NumFirstPostsToAllowIfIsThreat => NumFirstIfThreat}
-    val isThreat = author.threatLevel.isThreat
-    if (isThreat && (numFirstToAllow == 0 || numFirstToAllow > NumFirstIfThreat)) {
-      numFirstToAllow = NumFirstIfThreat
-    } */
-
     if ((numFirstToAllow > 0 && numFirstToApprove > 0) || numFirstToNotify > 0) {
-      if (numReviewTasksApproved < numFirstToApprove) {
+      lazy val numApproved = reviewTasksOldestFirst.count(_.decision.exists(_.isFine))
+      lazy val numLoaded = reviewTasksOldestFirst.length
+
+      if (numApproved < numFirstToApprove) {
         // This user is still under evaluation (is s/he a spammer or not?).
         autoApprove = false
-        if (numReviewTasksLoaded >= numFirstToAllow)
+        if (numLoaded >= numFirstToAllow)
           throwForbidden("_EsE6YKF2_", o"""You cannot post more posts until a moderator has
               approved your first posts""")
       }
 
-      if (numReviewTasksLoaded < math.min(MaxNumFirstPosts, numFirstToApprove + numFirstToNotify)) {
+      if (numLoaded < math.min(MaxNumFirstPosts, numFirstToApprove + numFirstToNotify)) {
         reviewReasons.append(ReviewReason.IsByNewUser, ReviewReason.NewPost)
       }
       else if (!autoApprove) {

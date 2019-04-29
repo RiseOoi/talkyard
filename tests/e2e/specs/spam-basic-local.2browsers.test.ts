@@ -150,7 +150,7 @@ describe("spam test, no external services:", () => {
   });
 
   it("... but is rejected", () => {
-    mallorysBrowser.serverErrorDialog.waitAndAssertTextMatches(/spam.*EdE7KVF2_/);
+    mallorysBrowser.serverErrorDialog.waitAndAssertTextMatches(/spam.*TyEPWREGSPM_/);
   });
 
   it("... closes the error dialog", () => {

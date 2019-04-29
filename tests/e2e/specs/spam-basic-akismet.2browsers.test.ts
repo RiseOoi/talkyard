@@ -33,6 +33,8 @@ let topicTitle = "Links links links";
 let post2Selector = '#post-2';
 let post3Selector = '#post-3';
 
+let notSpamPageUrl: string;
+
 const AkismetAlwaysSpamName = 'viagra-test-123';
 const AkismetAlwaysSpamEmail = 'akismet-guaranteed-spam@example.com';
 
@@ -45,10 +47,7 @@ const replyTwoIsSpam = 'replyTwoIsSpam --viagra-test-123--';
 const topicTwoTitle = 'topicTwoTitle';
 const topicTwoIsSpamBody = 'topicTwoIsSpamBody --viagra-test-123--';
 
-const topicThreeSpamTitle = 'topicThreeSpamTitle --viagra-test-123--';
-const topicThreeSpamBody = 'topicThreeSpamBody --viagra-test-123--';
-const replyTopicThreeSpam = 'replyTopicThreeSpam --viagra-test-123--';
-const replyBlocked = 'replyBlocked';
+const spamReplyThree = "This reply gets blocked. --viagra-test-123--";
 
 
 describe("spam test, external services like Akismet and Google Safe Browsing  TyTSPEXT", () => {
@@ -76,11 +75,10 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
 
   it("import a site", () => {
     let site: SiteData = make.forumOwnedByOwen('basicspam', { title: forumTitle });
-    site.settings.numFirstPostsToReview = 2;
-    site.settings.numFirstPostsToAllow = 4;
+    site.settings.numFirstPostsToReview = 9;
+    site.settings.numFirstPostsToAllow = 9;
     site.members.push(mons);
     site.members.push(maria);
-    //site.members.push(mallory);
     idAddress = server.importSiteData(site);
   });
 
@@ -91,7 +89,7 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   });
 
   it("... he's rejected, because of the email address", () => {
-    mallorysBrowser.serverErrorDialog.waitForIsSpamError();
+    mallorysBrowser.serverErrorDialog.waitForIsRegistrationSpamError();
   });
 
   it("... closes the dialogs", () => {
@@ -111,21 +109,23 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   it("He then submits a topic, not spam, works fine", () => {
     mallorysBrowser.complex.createAndSaveTopic(
         { title: topicOneNotSpamTitle, body: topicOneNotSpamBody });
+    notSpamPageUrl = mallorysBrowser.url().value;
   });
 
   it("... and a not-spam reply", () => {
-    mallorysBrowser.complex.replyToOrigPost(replyOneNotSpam);
+    mallorysBrowser.complex.replyToOrigPost(replyOneNotSpam); // notSpamPageUrl reply 1
   });
 
   it("He then submits a spam reply ...", () => {
-    mallorysBrowser.complex.replyToOrigPost(replyTwoIsSpam);
+    mallorysBrowser.complex.replyToOrigPost(replyTwoIsSpam);  // notSpamPageUrl reply 2, and
+                                                              // suspect spam post 1/3
   });
 
   it("... which will be visible, initially", () => {
     mallorysBrowser.waitForVisible(post2Selector);  // reply one
     mallorysBrowser.waitForVisible(post3Selector);  // reply two
-    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
-    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 1));
+    assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
+    assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 1));
   });
 
   it("The spam reply gets hidden, eventually", () => {
@@ -140,7 +140,7 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
 
   it("Mallory posts a spam topic", () => {
     mallorysBrowser.topbar.clickHome();
-    mallorysBrowser.complex.createAndSaveTopic(
+    mallorysBrowser.complex.createAndSaveTopic(            // suspect spam 2/3
         { title: topicTwoTitle, body: topicTwoIsSpamBody });
   });
 
@@ -157,28 +157,43 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   // ----- Moderate threat, blocked
 
   it("Mallory posts a fifth post — spam, for the 3rd time", () => {
-    mallorysBrowser.topbar.clickHome();
-    mallorysBrowser.complex.createAndSaveTopic(
-        { title: topicThreeSpamTitle, body: topicThreeSpamBody });
-  });
-
-  it("... and a spam reply", () => {
-    mallorysBrowser.complex.replyToOrigPost(replyTopicThreeSpam);
+    mallorysBrowser.go(notSpamPageUrl);
+    mallorysBrowser.complex.replyToOrigPost(spamReplyThree); // notSpamPageUrl reply 3, and
+                                                   // suspect spam 3/3 — gets Mallory blocked
   });
 
   it("... which initially is visible", () => {
-    assert(!mallorysBrowser.topic.isPostBodyHidden(c.BodyNr));
-    assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
+    assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 2));
   });
 
   it("... but soon get hidden, because is spam", () => {
-    mallorysBrowser.topic.refreshUntilBodyHidden(c.BodyNr);
-    assert(mallorysBrowser.topic.isPostBodyHidden(c.BodyNr));
-    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
+    mallorysBrowser.topic.refreshUntilBodyHidden(c.FirstReplyNr + 2);
+    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 2));
   });
 
-  it("Now Mallory may not post more replies", () => {
-    mallorysBrowser.complex.replyToOrigPost(replyBlocked);
+  it("Mallory tries to post another reply", () => {
+    mallorysBrowser.complex.replyToOrigPost("This reply gets blocked.");
+settings.debugEachStep=true;
+  });
+
+  it("... but gets blocked: max 3 pending maybe-spam posts allowed [TyT029ASL45], " +
+      "even though site.settings.numFirstPostsToAllow is 9", () => {
+    mallorysBrowser.serverErrorDialog.waitForTooManyPendingMaybeSpamPostsError();
+  });
+
+  it("... closes the error dialog", () => {
+    mallorysBrowser.serverErrorDialog.close();
+    mallorysBrowser.editor.cancel();
+  });
+
+  it("Mallory wants to post a new topic", () => {
+    mallorysBrowser.topbar.clickHome();
+    mallorysBrowser.complex.createAndSaveTopic(
+        { title: "This gets blocked", body: "Blocked topic text.", resultInError: true });
+  });
+
+  it("... but also the new topic gets blocked", () => {
+    mallorysBrowser.serverErrorDialog.waitForTooManyPendingMaybeSpamPostsError();
   });
 
 
