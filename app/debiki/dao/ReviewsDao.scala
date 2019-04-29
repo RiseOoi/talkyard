@@ -213,6 +213,7 @@ trait ReviewsDao {
             }
             updateSpamCheckTasks(humanThinksIsSpam = false, task, tx)
           case ReviewDecision.DeletePostOrPage =>
+            // [DETCTHR] If staff deletes many posts by this user, mark it as a moderate threat?
             if (task.isForBothTitleAndBody) {
               val pageId = task.pageId getOrDie "TyE4K85R2"
               deletePagesImpl(Seq(pageId), deleterId = decidedById,

@@ -562,25 +562,32 @@ package object core {
   }
 
 
-  type SpamFoundResults = immutable.Seq[SpamCheckResult.SpamFound]
+  type SpamCheckResults = immutable.Seq[SpamCheckResult]
 
-  sealed abstract class SpamCheckResult
+  sealed abstract class SpamCheckResult(val spamFound: Boolean) {
+    def spamCheckerDomain: String
+    def humanReadableMessage: String
+  }
 
   object SpamCheckResult {
-    case object NoSpam extends SpamCheckResult
+    case class NoSpam(spamCheckerDomain: String) extends SpamCheckResult(false) {
+      override def humanReadableMessage: String = "No spam found"
+    }
 
     /**
-      * @param modsMayUnhide — if moderators are allowed to override the spam check result
+      * @param staffMayUnhide — if moderators are allowed to override the spam check result
       *  and show the post, although detected as spam. *Not* allowed (i.e. is false)
       *  if Google Safe Browsing API says a link is malware.
+      * @param isCertain — if the spam checker claims it knows for 100% this is spam.
       * @param spamCheckerDomain — e.g. "akismet.com", "safebrowsing.googleapis.com", "dbl.spamhaus.org".
       * @param humanReadableMessage — a message that can be shown to the staff, so they'll know why
       *  the post was considered spam.
       */
     case class SpamFound(
-      modsMayUnhide: Boolean,
       spamCheckerDomain: String,
-      humanReadableMessage: String) extends  SpamCheckResult
+      isCertain: Boolean = false,
+      staffMayUnhide: Boolean = true,
+      humanReadableMessage: String) extends  SpamCheckResult(true)
   }
 
 

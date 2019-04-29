@@ -77,8 +77,8 @@ class LoginAsGuestController @Inject()(cc: ControllerComponents, edContext: EdCo
         userTrustLevel = None))
 
     globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
-        spamFoundResults: SpamFoundResults =>
-      SpamChecker.throwForbiddenIfSpam(spamFoundResults, "EdE5KJU3_")
+        spamCheckResults: SpamCheckResults =>
+      SpamChecker.throwForbiddenIfSpam(spamCheckResults, "EdE5KJU3_")
 
       val loginAttempt = GuestLoginAttempt(
         ip = request.ip,

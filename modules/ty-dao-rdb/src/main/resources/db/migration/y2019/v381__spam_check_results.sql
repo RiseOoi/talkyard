@@ -58,7 +58,7 @@ alter table spam_check_queue3 add constraint spamcheckqueue_c_resultsjson_len ch
     pg_column_size(results_json) between 2 and 10100);
 
 alter table spam_check_queue3 add constraint spamcheckqueue_c_resultstext_len check (
-    length(results_text) between 1 and 10100);
+    length(results_text) between 0 and 10100);
 
 alter table spam_check_queue3 drop constraint scq_site_post__p;
 alter table spam_check_queue3 add constraint scq_site_postid_revnr__p primary key (

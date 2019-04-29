@@ -26,6 +26,7 @@ import scala.collection.{immutable, mutable}
 import SystemDao._
 import debiki.Globals
 import play.api.libs.json.{JsObject, Json}
+import talkyard.server.JsX
 
 
 class NumSites(val byYou: Int, val total: Int)
@@ -392,7 +393,7 @@ class SystemDao(
 
   // COULD move to SpamSiteDao, since now uses only a per site tx.
   //
-  def dealWithSpam(spamCheckTaskNoResults: SpamCheckTask, spamFoundResults: SpamFoundResults) {
+  def handleSpamCheckResults(spamCheckTaskNoResults: SpamCheckTask, spamCheckResults: SpamCheckResults) {
     val postToSpamCheck= spamCheckTaskNoResults.postToSpamCheck getOrElse {
       // Currently registration spam is checked directly when registering;
       // we don't save anything to the database, and shouldn't find anything here later.
@@ -400,17 +401,22 @@ class SystemDao(
         "(i.e. registration spam?) [TyE295MKAR2]")
     }
 
-    val spamCheckTaskWithResults: SpamCheckTask = spamCheckTaskNoResults.copy(
-      resultAt = Some(globals.now),
-      resultJson = Some(JsObject(
-        spamFoundResults.map(r =>
-          r.spamCheckerDomain -> Json.obj(
-            "modsMayUnhide" -> r.modsMayUnhide)))),
-      resultText = Some(spamFoundResults.map(r => i"""
-        |${r.spamCheckerDomain}:
-        |${r.humanReadableMessage}""").mkString("\n-----\n").trim),
-      numIsSpamResults = Some(spamFoundResults.length),
-      numNotSpamResults = Some(0)) // ?? need to count # external serviced queried, in SpamChecker
+    val spamFoundResults: immutable.Seq[SpamCheckResult.SpamFound] =
+      spamCheckResults.collect { case r: SpamCheckResult.SpamFound => r }
+
+    val numIsSpamResults = spamFoundResults.length
+    val numNotSpamResults = spamCheckResults.length - numIsSpamResults
+
+    val spamCheckTaskWithResults: SpamCheckTask =
+      spamCheckTaskNoResults.copy(
+        resultAt = Some(globals.now()),
+        resultJson = Some(JsObject(spamCheckResults.map(r =>
+            r.spamCheckerDomain -> JsX.JsSpamCheckResult(r)))),
+        resultText = Some(spamCheckResults.map(r => i"""
+            |${r.spamCheckerDomain}:
+            |${r.humanReadableMessage}""").mkString("------").trim),
+        numIsSpamResults = Some(numIsSpamResults),
+        numNotSpamResults = Some(numNotSpamResults))
 
     // COULD if is new page, no replies, then hide the whole page (no point in showing a spam page).
     // Then mark section page stale below (4KWEBPF89).
@@ -447,6 +453,15 @@ class SystemDao(
       // disagrees with the spam check service, we'll tell the spam check service
       // that it did a mistake. [SPMSCLRPT]
       siteTransaction.upsertReviewTask(reviewTask)
+
+      SECURITY; COULD // if the author hasn't posted more than a few posts,  [DETCTHR]
+      // and they haven't gotten any like votes or replies,
+      // and many of the author's posts have been detected as spam —
+      // then:
+      //  - Hide all the author's not-yet-reviewed posts, and mark hen as a Moderate Threat.
+      //  - Moderate Threat: Should block hen from posting more posts, if hen has more than,
+      //    say five?, posts pending review. To prevent staff from having to review really
+      //    lots of posts by a single maybe-spammer.
 
       // If the post was visible, need to rerender the page + update post counts.
       if (postBefore.isVisible) {
@@ -525,8 +540,8 @@ class SystemDao(
 
     for (task <- spamCheckTasks) {
       globals.spamChecker.reportClassificationMistake(task)
+      val taskDone = task.copy(misclassificationsReportedAt = Some(globals.now()))
       val siteDao = globals.siteDao(task.siteId)
-      val taskDone = task.copy(misclassificationsReportedAt = Some(globals.now))
       siteDao.readWriteTransaction { tx =>
         tx.updateSpamCheckTaskForPostWithResults(taskDone)
       }

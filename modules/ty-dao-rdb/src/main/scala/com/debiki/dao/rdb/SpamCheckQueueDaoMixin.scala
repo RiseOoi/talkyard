@@ -117,7 +117,7 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
     val values = List(
       spamCheckTask.resultAt.orNullTimestamp,
       spamCheckTask.resultJson.orNullJson,
-      spamCheckTask.resultText.trimOrNullVarchar,
+      spamCheckTask.resultText.orNullVarchar,
       spamCheckTask.numIsSpamResults.orNullInt,
       spamCheckTask.numNotSpamResults.orNullInt,
       spamCheckTask.humanSaysIsSpam.orNullBoolean,

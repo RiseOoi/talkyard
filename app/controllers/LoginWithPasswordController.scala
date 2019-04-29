@@ -179,8 +179,8 @@ class LoginWithPasswordController @Inject()(cc: ControllerComponents, edContext:
         userTrustLevel = Some(TrustLevel.NewMember)))
 
     globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
-          spamFoundResults: SpamFoundResults =>
-      SpamChecker.throwForbiddenIfSpam(spamFoundResults, "EdE7KVF2_")
+          spamCheckResults: SpamCheckResults =>
+      SpamChecker.throwForbiddenIfSpam(spamCheckResults, "EdE7KVF2_")
 
       // Password strength tested in createPasswordUserCheckPasswordStrong() below.
 

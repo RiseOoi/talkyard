@@ -308,6 +308,12 @@ trait PostsDao {
         throwForbidden("EsE5Y80G2_", "Forbidden")
     }
 
+    lazy val reviewTasksRecentFirst =
+      tx.loadReviewTasksAboutUser(author.id, limit = MaxNumFirstPosts, OrderBy.MostRecentFirst)
+
+    lazy val reviewTasksOldestFirst =
+      tx.loadReviewTasksAboutUser(author.id, limit = MaxNumFirstPosts, OrderBy.OldestFirst)
+
     // COULD add a users3 table status field instead, and update it on write, which says
     // if the user has too many pending comments / edits. Then could thow that status
     // client side, withouth having to run the below queries again and again.
@@ -321,22 +327,20 @@ trait PostsDao {
       // For now, just this basic check to prevent too-often-flagged people from posting priv msgs
       // to non-staff. COULD allow messages to staff, but currently we here don't have access
       // to the page members, so we don't know if they are staff.
-      // Later: auto bump threat level to ModerateThreat, then MessagesDao will do all this
+      // Later: auto bump threat level to ModerateThreat [DETCTHR], then MessagesDao will do all this
       // automatically.
-      val tasks = tx.loadReviewTasksAboutUser(author.id, limit = MaxNumFirstPosts,
-        OrderBy.MostRecentFirst)
-      val numLoaded = tasks.length
-      val numPending = tasks.count(_.decision.isEmpty)
-      val numRejected = tasks.count(_.decision.exists(_.isRejectionBadUser))
+      val numLoaded = reviewTasksRecentFirst.length
+      val numPending = reviewTasksRecentFirst.count(_.decision.isEmpty)
+      val numRejected = reviewTasksRecentFirst.count(_.decision.exists(_.isRejectionBadUser))
       if (numLoaded >= 2 && numRejected > (numLoaded / 2)) // for now
         throwForbidden("EsE7YKG2", "Too many rejected comments or edits or something")
       if (numPending > 5) // for now
-        throwForbidden("EsE5JK20", "Too many pending review tasks")
+        throwForbidden("EsE5JK20", "Too many pending review tasks")  // do always instead? all new members + threat
       return (Nil, true)
     }
 
     val settings = loadWholeSiteSettings(tx)
-    val numFirstToAllow = math.min(MaxNumFirstPosts, settings.numFirstPostsToAllow)
+    var numFirstToAllow = math.min(MaxNumFirstPosts, settings.numFirstPostsToAllow)
     val numFirstToApprove = math.min(MaxNumFirstPosts, settings.numFirstPostsToApprove)
     var numFirstToNotify = math.min(MaxNumFirstPosts, settings.numFirstPostsToReview)
 
@@ -346,21 +350,40 @@ trait PostsDao {
       numFirstToNotify = 2 - numFirstToApprove
     }
 
-    if ((numFirstToAllow > 0 && numFirstToApprove > 0) || numFirstToNotify > 0) {
-      val tasks = tx.loadReviewTasksAboutUser(author.id, limit = MaxNumFirstPosts,
-        OrderBy.OldestFirst)
-      val numApproved = tasks.count(_.decision.exists(_.isFine))
-      val numLoaded = tasks.length
+    lazy val numReviewTasksApproved = reviewTasksOldestFirst.count(_.decision.exists(_.isFine))
+    lazy val numReviewTasksLoaded = reviewTasksOldestFirst.length
 
-      if (numApproved < numFirstToApprove) {
+    // !!!!!!!!!!! oops won't work, because haven't yet detected any spam,
+    // that's not done until later, SpamCheckActor.
+    // Yes will work, because we lookup *old* reviews reasons.
+    if (author.trustLevel.toInt < TrustLevel.FullMember.toInt) {
+      // This is a fairly new member, maybe a spammer? If a few of hens posts have
+      // been classified as spam, block hen from posting anything more, until
+      // staff has reviewed.
+      val numMaybeSpam = reviewTasksOldestFirst.count(t =>
+        t.reasons.contains(ReviewReason.PostIsSpam) && !t.decision.exists(_.isFine))
+      if (numMaybeSpam >= 3 && numMaybeSpam >= numReviewTasksApproved)
+        throwForbidden("TyENEWMBRSPM", o"""You cannot post more posts until a moderator has
+            reviewed your previous posts""")
+    }
+
+    /*
+    import AllSettings.{NumFirstPostsToAllowIfIsThreat => NumFirstIfThreat}
+    val isThreat = author.threatLevel.isThreat
+    if (isThreat && (numFirstToAllow == 0 || numFirstToAllow > NumFirstIfThreat)) {
+      numFirstToAllow = NumFirstIfThreat
+    } */
+
+    if ((numFirstToAllow > 0 && numFirstToApprove > 0) || numFirstToNotify > 0) {
+      if (numReviewTasksApproved < numFirstToApprove) {
         // This user is still under evaluation (is s/he a spammer or not?).
         autoApprove = false
-        if (numLoaded >= numFirstToAllow)
+        if (numReviewTasksLoaded >= numFirstToAllow)
           throwForbidden("_EsE6YKF2_", o"""You cannot post more posts until a moderator has
               approved your first posts""")
       }
 
-      if (numLoaded < math.min(MaxNumFirstPosts, numFirstToApprove + numFirstToNotify)) {
+      if (numReviewTasksLoaded < math.min(MaxNumFirstPosts, numFirstToApprove + numFirstToNotify)) {
         reviewReasons.append(ReviewReason.IsByNewUser, ReviewReason.NewPost)
       }
       else if (!autoApprove) {
@@ -1336,6 +1359,8 @@ trait PostsDao {
     // Then we should instead compare with the last editor (or all/recent editors).
     // But how do we know if the one who inserted any spam, is the last editor,
     // or the original author? Ignore this, for now. [WIKISPAM])
+    // [DETCTHR] If the post got deleted because it's spam, should eventually
+    // marke the user as a moderate threat.
     val maybeDeletingSpam = user.isStaff && !postAuthor.isStaff && user.id != postAuthor.id
     if (maybeDeletingSpam) {  //  && anyDeleteReason is DeleteReasons.IsSpam) {
       val spamCheckTasksAnyRevNr = tx.loadPendingSpamCheckTasksForPost(postBefore.id)

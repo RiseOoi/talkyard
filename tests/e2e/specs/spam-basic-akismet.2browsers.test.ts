@@ -45,6 +45,11 @@ const replyTwoIsSpam = 'replyTwoIsSpam --viagra-test-123--';
 const topicTwoTitle = 'topicTwoTitle';
 const topicTwoIsSpamBody = 'topicTwoIsSpamBody --viagra-test-123--';
 
+const topicThreeSpamTitle = 'topicThreeSpamTitle --viagra-test-123--';
+const topicThreeSpamBody = 'topicThreeSpamBody --viagra-test-123--';
+const replyTopicThreeSpam = 'replyTopicThreeSpam --viagra-test-123--';
+const replyBlocked = 'replyBlocked';
+
 
 describe("spam test, external services like Akismet and Google Safe Browsing  TyTSPEXT", () => {
 
@@ -119,14 +124,18 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   it("... which will be visible, initially", () => {
     mallorysBrowser.waitForVisible(post2Selector);  // reply one
     mallorysBrowser.waitForVisible(post3Selector);  // reply two
+    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
+    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 1));
   });
 
   it("The spam reply gets hidden, eventually", () => {
     mallorysBrowser.topic.refreshUntilBodyHidden(c.FirstReplyNr + 1);
+    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 1));
   });
 
   it("But not the non-spam reply", () => {
     mallorysBrowser.waitForVisible(post2Selector);  // reply one
+    assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
   });
 
   it("Mallory posts a spam topic", () => {
@@ -144,14 +153,32 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
     assert(mallorysBrowser.topic.isPostBodyHidden(c.BodyNr));
   });
 
-  it("Mallory tries to posts a fifth post (a new topic)", () => {
+
+  // ----- Moderate threat, blocked
+
+  it("Mallory posts a fifth post — spam, for the 3rd time", () => {
     mallorysBrowser.topbar.clickHome();
     mallorysBrowser.complex.createAndSaveTopic(
-        { title: topicTwoTitle, body: topicTwoIsSpamBody, resultInError: true });
+        { title: topicThreeSpamTitle, body: topicThreeSpamBody });
   });
 
-  it("... however, ... allow = 4, this was nr 5", () => {
-    mallorysBrowser.debug();
+  it("... and a spam reply", () => {
+    mallorysBrowser.complex.replyToOrigPost(replyTopicThreeSpam);
+  });
+
+  it("... which initially is visible", () => {
+    assert(!mallorysBrowser.topic.isPostBodyHidden(c.BodyNr));
+    assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
+  });
+
+  it("... but soon get hidden, because is spam", () => {
+    mallorysBrowser.topic.refreshUntilBodyHidden(c.BodyNr);
+    assert(mallorysBrowser.topic.isPostBodyHidden(c.BodyNr));
+    assert(mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
+  });
+
+  it("Now Mallory may not post more replies", () => {
+    mallorysBrowser.complex.replyToOrigPost(replyBlocked);
   });
 
 

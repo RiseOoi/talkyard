@@ -631,8 +631,8 @@ class LoginWithOpenAuthController @Inject()(cc: ControllerComponents, edContext:
         userTrustLevel = Some(TrustLevel.NewMember)))
 
     globals.spamChecker.detectRegistrationSpam(spamCheckTask) map {
-          spamFoundResults: SpamFoundResults =>
-      SpamChecker.throwForbiddenIfSpam(spamFoundResults, "TyE2AKF067")
+          spamCheckResults: SpamCheckResults =>
+      SpamChecker.throwForbiddenIfSpam(spamCheckResults, "TyE2AKF067")
 
       val becomeOwner = LoginController.shallBecomeOwner(request, emailAddress)
 
