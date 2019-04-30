@@ -178,6 +178,12 @@ function playTimeHours(hours: number) { playTimeSeconds(hours * 3600); }
 function playTimeDays(days: number) { playTimeSeconds(days * 3600 * 24); }
 
 
+function getTestCounters(): TestCounters {
+  const response = getOrDie(settings.mainSiteOrigin + '/-/test-counters');
+  return JSON.parse(response.body);
+}
+
+
 function getLastEmailSenTo(siteId: SiteId, email: string, browser): EmailSubjectBody | null {
   for (let attemptNr = 1; attemptNr <= settings.waitforTimeout / 500; ++attemptNr) {
     const response = getOrDie(settings.mainSiteOrigin + '/-/last-e2e-test-email?sentTo=' + email +
@@ -412,6 +418,7 @@ export = {
   playTimeMinutes,
   playTimeHours,
   playTimeDays,
+  getTestCounters,
   getLastEmailSenTo,
   countLastEmailsSentTo,
   getEmailsSentToAddrs,

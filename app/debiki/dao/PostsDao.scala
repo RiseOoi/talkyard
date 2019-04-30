@@ -341,7 +341,7 @@ trait PostsDao {
 
     // If too many recent review tasks about maybe-spam are already pending,
     // don't let this new user post anything more, until staff has had a look.
-    if (author.trustLevel.toInt < TrustLevel.FullMember.toInt) {
+    if (author.trustLevel.toInt < TrustLevel.TrustedMember.toInt) {
       val numMaybeSpam = reviewTasksRecentFirst.count(t =>
         t.reasons.contains(ReviewReason.PostIsSpam) && t.decision.isEmpty)
 
@@ -351,7 +351,10 @@ trait PostsDao {
       val numYesSpam = reviewTasksRecentFirst.count(t =>
         t.reasons.contains(ReviewReason.PostIsSpam) && t.decision.exists(_.isRejectionBadUser))
 
-      if (numMaybeSpam >= AllSettings.MaxPendingMaybeSpamPosts && numYesSpam >= numWasNotSpam)
+      val maxMaybeSpam = (author.trustLevel.toInt < TrustLevel.FullMember.toInt) ?
+        AllSettings.MaxPendingMaybeSpamPostsNewMember | AllSettings.MaxPendingMaybeSpamPostsFullMember
+
+      if (numMaybeSpam + numYesSpam >= maxMaybeSpam && numYesSpam >= numWasNotSpam)
         throwForbidden("TyENEWMBRSPM_", o"""You cannot post more posts until a moderator
           has reviewed your previous posts.""" + "\n\n" + o"""Our spam detection system thinks
           some of your posts look like spam, sorry.""")

@@ -227,7 +227,7 @@ class SpamChecker(
       akismetKeyIsValidPromise.success(isValid)
     }).recover({
       case ex: Exception =>
-        p.Logger.warn(s"Error verifying Akismet API key [TyE2AKB5R0]", ex)
+        p.Logger.warn("Error verifying Akismet API key [TyE2AKB5R0]", ex)
     })
   }
 
@@ -736,15 +736,20 @@ class SpamChecker(
 
   val AkismetDomain = "akismet.com"
 
-  private def sendAkismetCheckSpamRequest(apiKey: String, payload: String,
-        promise: Promise[(Boolean, Boolean)]) {
+
+  private def sendAkismetRequest(apiKey: String, what: String, payload: String): Future[WSResponse] = {
     val request: WSRequest =
-      wsClient.url(s"https://$apiKey.rest.$AkismetDomain/1.1/comment-check").withHttpHeaders(
+      wsClient.url(s"https://$apiKey.rest.$AkismetDomain/1.1/$what").withHttpHeaders(
         play.api.http.HeaderNames.CONTENT_TYPE -> ContentType,
         play.api.http.HeaderNames.USER_AGENT -> UserAgent,
         play.api.http.HeaderNames.CONTENT_LENGTH -> payload.length.toString)
+    request.post(payload)
+  }
 
-    request.post(payload).map({ response: WSResponse =>
+
+  private def sendAkismetCheckSpamRequest(apiKey: String, payload: String,
+        promise: Promise[(Boolean, Boolean)]) {
+    sendAkismetRequest(apiKey, what = "comment-check", payload = payload).map({ response: WSResponse =>
       val body = response.body
       body.trim match {
         case "true" =>
@@ -897,40 +902,74 @@ class SpamChecker(
   }
 
 
-  def reportClassificationMistake(spamCheckTask: SpamCheckTask): Future[Boolean] = {
-    val promise = Promise[Boolean]()
+  /** Returns num false positives and false negatives reported.
+    */
+  def reportClassificationMistake(spamCheckTask: SpamCheckTask): Future[(Int, Int)] = {
+    val promise = Promise[(Int, Int)]()
     val origin = originOfSiteId(spamCheckTask.siteId) getOrElse {
-      promise.success(false)
+      promise.success((0, 0))
       return promise.future
     }
 
     val resultJson = spamCheckTask.resultJson.getOrDie("TyE306SK2")
     val akismetResultJson = (resultJson \ AkismetDomain).asOpt[JsObject]
     val akismetSaysIsSpam = akismetResultJson map { json =>
-      (json \ "spamFound").asOpt[Boolean].getOrDie(  // written here [02MRHL2]
-        "TyE58MKRT2", "spamFound field missing")
+      (json \ "spamFound").asOpt[Boolean] getOrElse {  // written here [02MRHL2]
+        promise.success((0, 0)); die("TyE58MK3RT2", "spamFound field missing")}
     }
+
+    val siteId = spamCheckTask.siteId
+    val postId = spamCheckTask.postToSpamCheck.map(_.postId) getOrElse NoPostId
 
     if (spamCheckTask.humanSaysIsSpam == akismetSaysIsSpam) {
-      // Some other spam check services missclasified this. They aren't interested
-      // in feedback about their mistake. Nothing to do.
-      promise.success(true)
-      return promise.future
+      // Some spam check service other than Akismet misclassified this, and it doesn't
+      // accept feedback about mistakes. Nothing to do.
+      promise.success((0, 0))
     }
-
-    // Currently only Akismet supported.
-    akismetKeyIsValidPromise.future onComplete {
-      case Success(true) =>
-        //https://your-api-key.rest.akismet.com/1.1/submit-spam
-        makeAkismetRequestBody(spamCheckTask) match {
-          case None =>
-            promise.success(false)
-          case Some(akismetBody) =>
-            // todo:  checkViaAkismet(akismetBody)  but a report spam/ham request instead
-            promise.success(true)
-        }
-      case _ =>
-        promise.success(false)
+    else {
+      // Akismet misclassified this. Now call API endpoints:
+      // - https://your-api-key.rest.akismet.com/1.1/submit-spam
+      // - https://your-api-key.rest.akismet.com/1.1/submit-ham
+      // Find the docs here:
+      // - https://akismet.com/development/api/#submit-spam
+      // - https://akismet.com/development/api/#submit-ham
+      akismetKeyIsValidPromise.future onComplete {
+        case Success(true) =>
+          val doWhat = spamCheckTask.humanSaysIsSpam.is(true) ? "submit-spam" | "submit-ham"
+          makeAkismetRequestBody(spamCheckTask) match {
+            case None =>
+              promise.success((0, 0))
+            case Some(requsetBody) =>
+              sendAkismetRequest(anyAkismetKey.get, what = doWhat, payload = requsetBody).map({
+                    response: WSResponse =>
+                val responseBody = response.body
+                if (response.status == 200) {
+                  if (responseBody != "Thanks for making the web a better place.") {
+                    p.Logger.warn(s"Unexpected Akismet response: $responseBody [TyE702M5BZW]")
+                  }
+                  p.Logger.debug(s"s$siteId: Reported $doWhat to Akismet, post id $postId [TyM602MBWT]")
+                  promise.success(
+                    // (a, b) and a = false positive, i.e. Akismet thought "It's spam", when it wasn't.
+                    akismetSaysIsSpam.is(true) ? (1, 0) | (0, 1))
+                }
+                else {
+                  p.Logger.warn("Non-200 response from Akismet to misclassification request [TyE5M70J2],"
+                    + s"\nstatus: ${response.status}"
+                    + s"\nrequest body:\n$requsetBody"
+                    + s"\nresponse body:\n$responseBody")
+                  promise.success((0, 0))
+                }
+              })
+                .recover({
+                  case ex: Exception =>
+                    p.Logger.warn("Error sending misclassification request to Akismet [TyE702MR84TD], " +
+                      s"requestBody:\n$requsetBody", ex)
+                    promise.success((0, 0))
+                })
+          }
+        case _ =>
+          promise.success((0, 0))
+      }
     }
 
     promise.future

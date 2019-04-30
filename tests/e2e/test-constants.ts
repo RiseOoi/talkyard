@@ -99,6 +99,7 @@ export = {
   MagicTimeoutPollMs: 500,  // [4GKB93RA]
   SsoTestPath: '/-/sso-test',
   WatchbarHomeLinkTitle: 'Home',
-
+  AlwaysSpamText: '--viagra-test-123--',
+  AlwaysSpamEmailAddr: 'akismet-guaranteed-spam@example.com',
 };
 

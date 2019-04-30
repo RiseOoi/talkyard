@@ -539,12 +539,16 @@ class SystemDao(
       readOnlyTransaction(_.loadMisclassifiedSpamCheckTasks(22))
 
     for (task <- spamCheckTasks) {
-      globals.spamChecker.reportClassificationMistake(task)
-      val taskDone = task.copy(misclassificationsReportedAt = Some(globals.now()))
-      val siteDao = globals.siteDao(task.siteId)
-      siteDao.readWriteTransaction { tx =>
-        tx.updateSpamCheckTaskForPostWithResults(taskDone)
-      }
+      globals.spamChecker.reportClassificationMistake(task).foreach({
+            case (falsePositives, falseNegatives) =>
+        globals.e2eTestCounters.numReportedSpamFalsePositives += falsePositives
+        globals.e2eTestCounters.numReportedSpamFalseNegatives += falseNegatives
+        val taskDone = task.copy(misclassificationsReportedAt = Some(globals.now()))
+        val siteDao = globals.siteDao(task.siteId)
+        siteDao.readWriteTransaction { tx =>
+          tx.updateSpamCheckTaskForPostWithResults(taskDone)
+        }
+      })(globals.executionContext)
     }
   }
 

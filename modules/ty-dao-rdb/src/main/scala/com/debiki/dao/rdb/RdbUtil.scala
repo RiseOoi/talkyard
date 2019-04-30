@@ -484,7 +484,7 @@ object RdbUtil {
         language = getString(rs, "language"))
     }
 
-    val anyIsMisclassified = getOptInt(rs, "is_misclassified")
+    val anyIsMisclassified = getOptBool(rs, "is_misclassified")
 
     val result = SpamCheckTask(
       siteId = rs.getInt("site_id"),
@@ -512,7 +512,7 @@ object RdbUtil {
       humanSaysIsSpam = getOptBool(rs, "human_says_is_spam"),
       misclassificationsReportedAt = getOptWhen(rs, "misclassifications_reported_at"))
 
-    dieIf(anyIsMisclassified != result.isMisclassified, "TyE068TDGW2")
+    dieIf(result.isMisclassified != anyIsMisclassified, "TyE068TDGW2")
     result
   }
 

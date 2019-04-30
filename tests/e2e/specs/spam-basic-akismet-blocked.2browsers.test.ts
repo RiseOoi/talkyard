@@ -154,7 +154,7 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   });
 
 
-  // ----- Moderate threat, blocked
+  // ----- Too many seems-like-spam comments, Mallory gets blocked
 
   it("Mallory posts a fifth post — spam, for the 3rd time", () => {
     mallorysBrowser.go(notSpamPageUrl);
@@ -173,7 +173,6 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
 
   it("Mallory tries to post another reply", () => {
     mallorysBrowser.complex.replyToOrigPost("This reply gets blocked.");
-settings.debugEachStep=true;
   });
 
   it("... but gets blocked: max 3 pending maybe-spam posts allowed [TyT029ASL45], " +
@@ -183,7 +182,7 @@ settings.debugEachStep=true;
 
   it("... closes the error dialog", () => {
     mallorysBrowser.serverErrorDialog.close();
-    mallorysBrowser.editor.cancel();
+    mallorysBrowser.editor.cancelNoHelp();
   });
 
   it("Mallory wants to post a new topic", () => {
@@ -200,12 +199,30 @@ settings.debugEachStep=true;
   // ------ Reviewing spam
 
   it("Owen goes to the Review admin tab and logs in", () => {
-    owensBrowser.adminArea.goToReview(idAddress.origin);
-    owensBrowser.loginDialog.loginWithPassword(owen);
+    owensBrowser.adminArea.goToReview(idAddress.origin, { loginAs: owen });
+  });
+
+  it("He reject-deletes the thre spam posts", () => {
+    owensBrowser.adminArea.review.rejectDeleteTaskIndex(1);
+    owensBrowser.adminArea.review.rejectDeleteTaskIndex(2);
+    owensBrowser.adminArea.review.rejectDeleteTaskIndex(3);
+    owensBrowser.adminArea.review.playTimePastUndo();
+  });
+
+  it("Mallory is still blocked", () => {
+    mallorysBrowser.go(notSpamPageUrl);
+    mallorysBrowser.complex.replyToOrigPost("Gets blocked");
+  });
+
+  it("... but he's stil blocked", () => {
+    mallorysBrowser.serverErrorDialog.waitForTooManyPendingMaybeSpamPostsError();
   });
 
 
   // ------ Banning the spammer
+
+  // TESTS_MISSING: Owen clicks some shortcut button and bans Mallory,
+  // who gets logged out, and cannot login again.
 
 });
 

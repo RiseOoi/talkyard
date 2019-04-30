@@ -248,7 +248,8 @@ object AllSettings {
   val MinPasswordLengthHardcodedDefault = 10
   val HardMinPasswordLength = 8
 
-  val MaxPendingMaybeSpamPosts = 3  // sync with e2e test [TyT029ASL45]
+  val MaxPendingMaybeSpamPostsNewMember = 3  // sync with e2e test [TyT029ASL45]
+  val MaxPendingMaybeSpamPostsFullMember = 6
 
   def makeDefault(globals: Globals): AllSettings = new AllSettings {  // [8L4KWU02]
     val userMustBeAuthenticated = false

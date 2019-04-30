@@ -96,6 +96,11 @@ object Globals {
 }
 
 
+class E2eTestCounters {
+  @volatile var numReportedSpamFalsePositives: Int = 0
+  @volatile var numReportedSpamFalseNegatives: Int = 0
+}
+
 
 class Globals(
   private val appLoaderContext: p.ApplicationLoader.Context,
@@ -112,6 +117,8 @@ class Globals(
   }
 
   var edContext: EdContext = _
+
+  val e2eTestCounters = new E2eTestCounters
 
   private implicit def execCtc: ExecutionContext = executionContext
 
