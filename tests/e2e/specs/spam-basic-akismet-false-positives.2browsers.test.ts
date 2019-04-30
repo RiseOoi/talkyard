@@ -25,7 +25,7 @@ let forumTitle = "Basic Spam Test Forum";
 
 let countersBefore;
 
-describe("spam test, external services like Akismet and Google Safe Browsing  TyTSPEXT", () => {
+describe("spam test, Akismet false positives = incorrectly detected as spam  TyT205MKRRK0", () => {
 
   if (!settings.include3rdPartyDependentTests) {
     console.log("Skipping this spec; no 3rd party credentials specified.");
@@ -65,6 +65,7 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   it("... and two replies", () => {
     mariasBrowser.complex.replyToOrigPost("Reply one, " + c.AlwaysSpamText);
     mariasBrowser.complex.replyToOrigPost("Reply two, " + c.AlwaysSpamText);
+    // Now 3 comments detected as spam, so Maria gets blocked. [TyT029ASL45]
   });
 
   it("All her posts get classified as spam", () => {
@@ -94,7 +95,6 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   });
 
   it("He approves Maria's posts, which aren't spam — v*agra is on-topic in this forum", () => {
-owensBrowser.debug();
     owensBrowser.adminArea.review.approvePostForTaskIndex(1);
     owensBrowser.adminArea.review.approvePostForTaskIndex(2);
     owensBrowser.adminArea.review.approvePostForTaskIndex(3);
