@@ -14,43 +14,29 @@ declare let browser: any;
 declare let browserA: any;
 declare let browserB: any;
 
-let everyone;
 let owen;
 let owensBrowser;
-let maria;
-let mariasBrowser;
 let mallory;
 let mallorysBrowser;
-let mons;
-let monsBrowser;
-let guest;
-let guestsBrowser;
-let strangersBrowser;
 
 let idAddress: IdAddress;
 let forumTitle = "Basic Spam Test Forum";
-let topicTitle = "Links links links";
-let post2Selector = '#post-2';
-let post3Selector = '#post-3';
 
 let notSpamPageUrl: string;
 
-const AkismetAlwaysSpamName = 'viagra-test-123';
-const AkismetAlwaysSpamEmail = 'akismet-guaranteed-spam@example.com';
 
 const topicOneNotSpamTitle = 'topicOneNotSpamTitle'
 const topicOneNotSpamBody = 'topicOneNotSpamBody'
 const replyOneNotSpam = 'replyOneNotSpam';
 
-// ' --viagra-test-123--' makes Akismet always claim the post is spam.
-const replyTwoIsSpam = 'replyTwoIsSpam --viagra-test-123--';
+const replyTwoIsSpam = 'replyTwoIsSpam ' + c.AlwaysSpamText;
 const topicTwoTitle = 'topicTwoTitle';
-const topicTwoIsSpamBody = 'topicTwoIsSpamBody --viagra-test-123--';
+const topicTwoIsSpamBody = 'topicTwoIsSpamBody ' + c.AlwaysSpamText;
 
-const spamReplyThree = "This reply gets blocked. --viagra-test-123--";
+const spamReplyThree = "This reply gets blocked. " + c.AlwaysSpamText;
 
 
-describe("spam test, external services like Akismet and Google Safe Browsing  TyTSPEXT", () => {
+describe("spam test, Akismet  TyTSPAKISMET", () => {
 
   if (!settings.include3rdPartyDependentTests) {
     console.log("Skipping this spec; no 3rd party credentials specified.");
@@ -58,32 +44,29 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   }
 
   it("initialize people", () => {
-    everyone = _.assign(browser, pagesFor(browser));
     owen = make.memberOwenOwner();
     owensBrowser = _.assign(browserA, pagesFor(browserA));
-    mons = make.memberModeratorMons();
-    maria = make.memberMaria();
     mallory = make.memberMallory();
-    guest = make.guestGunnar();
-    // Reuse the same browser.
-    monsBrowser = _.assign(browserB, pagesFor(browserB));
-    mariasBrowser = monsBrowser;
-    mallorysBrowser = monsBrowser;
-    guestsBrowser = monsBrowser;
-    strangersBrowser = monsBrowser;
+    mallorysBrowser = _.assign(browserB, pagesFor(browserB));
   });
 
   it("import a site", () => {
     let site: SiteData = make.forumOwnedByOwen('basicspam', { title: forumTitle });
     site.settings.numFirstPostsToReview = 9;
     site.settings.numFirstPostsToAllow = 9;
-    site.members.push(mons);
-    site.members.push(maria);
     idAddress = server.importSiteData(site);
   });
 
-  it("Mallory tries to sign up with a spammers address", () => {
+  it("Mallory arrives, with a blank stare in his eyes", () => {
     mallorysBrowser.go(idAddress.origin);
+  });
+
+  /* This is disabled for now. [PROFLSPM] Instead, do create user profiles, even if
+  believe is a spammer. But heavily lock down the profiles (mark as Moderate Threat),
+  and send any profile text of theirs, to a spam check service. Maybe do w all users'
+  profile text.
+
+  it("He tries to sign up with a spammers address", () => {
     mallorysBrowser.complex.signUpAsMemberViaTopbar(
         { ...mallory, emailAddress: AkismetAlwaysSpamEmail });
   });
@@ -96,6 +79,7 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
     mallorysBrowser.serverErrorDialog.close();
     mallorysBrowser.loginDialog.clickCancel();
   });
+  */
 
   it("Mallory retries with a non-spam address", () => {
     mallorysBrowser.complex.signUpAsMemberViaTopbar(mallory);
@@ -122,8 +106,8 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   });
 
   it("... which will be visible, initially", () => {
-    mallorysBrowser.waitForVisible(post2Selector);  // reply one
-    mallorysBrowser.waitForVisible(post3Selector);  // reply two
+    mallorysBrowser.topic.waitForPostNrVisible(c.FirstReplyNr + 0); // reply nr 1
+    mallorysBrowser.topic.waitForPostNrVisible(c.FirstReplyNr + 1); // reply nr 2
     assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
     assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr + 1));
   });
@@ -134,7 +118,7 @@ describe("spam test, external services like Akismet and Google Safe Browsing  Ty
   });
 
   it("But not the non-spam reply", () => {
-    mallorysBrowser.waitForVisible(post2Selector);  // reply one
+    mallorysBrowser.topic.waitForPostNrVisible(c.FirstReplyNr);
     assert(!mallorysBrowser.topic.isPostBodyHidden(c.FirstReplyNr));
   });
 

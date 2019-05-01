@@ -519,9 +519,10 @@ admin -
         - mod-review.2browsers.test.ts  TyT6KRBEQ2
 
 spam: (4BKS0)
-          - spam-basic-akismet.2browsers.test.ts
+          - spam-basic-akismet.2browsers.test.ts  TyTSPAKISMET
           - spam-basic-akismet-false-positives.2browsers.test.ts  TyT205MKRRK0
           - spam-basic-akismet-false-negatives.2browsers.test.ts  TyT63MKWYT37
+          - spam-basic-safe-browsing-api-blocked.2browsers.test.ts  TyTSPSAFEBRAPI
 
 delete user:    NEXT was a bug, when deleted by admin
   deletes henself:

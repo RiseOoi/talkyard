@@ -547,6 +547,13 @@ package object core {
 
     def siteUserId = SiteUserId(siteId, who.id)
 
+    def sitePostIdRevOrUser: String = s"s$siteId, " + (postToSpamCheck match {
+      case Some(thePostToSpamCheck) =>
+        s"post ${thePostToSpamCheck.postId} rev nr ${thePostToSpamCheck.postRevNr}"
+      case None =>
+        s"user ${who.id} request stuff $requestStuff"
+    })
+
     def isMisclassified: Option[Boolean] =
       if (resultAt.isEmpty || humanSaysIsSpam.isEmpty) None
       else Some(

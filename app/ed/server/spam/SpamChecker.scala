@@ -22,6 +22,7 @@ import com.debiki.core.Prelude._
 import com.debiki.core.SpamCheckResult.SpamFound
 import debiki.{TextAndHtml, TextAndHtmlMaker}
 import debiki.EdHttp.throwForbidden
+import debiki.JsonUtils.readOptString
 import java.{net => jn}
 import java.net.UnknownHostException
 import play.{api => p}
@@ -81,7 +82,7 @@ object BadSpamCheckResponseException extends QuickException
   * Jeff Atwood @ Discourse's list of block lists:
   *   https://meta.discourse.org/t/questionable-account-checks-at-the-time-of-signup/19068/7
   *
-  * Deal w new user *profile* spam:
+  * Deal w new user *profile* spam: [PROFLSPM]
   *   https://meta.discourse.org/t/lots-of-spam-new-user-registrations/38925/17
   *
   * And Discourse's built in spam control:
@@ -262,6 +263,19 @@ class SpamChecker(
           }
 
         val akismetFuture: Future[SpamCheckResult] =
+          Future.successful(SpamCheckResult.NoSpam(AkismetDomain))
+          /* Disable for now — I've read Akismet sometimes blocks too many people, during
+          registration, and then there might be no way for them to tell the forum staff
+          about this, since they couldn't join the forum (and that might be The way
+          to get in touch with the organization). Wait until Akismet comment spam
+          has been in use for a while so I better know how well it works.
+          And, instead of blocking profiles before they're even saved — do allow
+          *creation* of profiles, but restrict them afterwards, instead, if they're
+          likely spammers — set the threat level to Moderate Threat? And staff
+          can optionally contact them and ask, if unsure (spammers typically don't
+          have any sensible on-topic replies if staff says "who are you why did you join?").
+          Also submit their About profile text to a spam check service at the
+          same time. [PROFLSPM]
           if (!akismetEnabled) Future.successful(SpamCheckResult.NoSpam(AkismetDomain))
           else {
             makeAkismetRequestBody(spamCheckTask) match {
@@ -270,7 +284,7 @@ class SpamChecker(
               case Some(akismetBody) =>
                 checkViaAkismet(akismetBody)
             }
-          }
+          } */
 
         Seq(stopForumSpamFuture, akismetFuture)
       }
@@ -315,7 +329,10 @@ class SpamChecker(
             s"Text contains test spam text: '$EdSpamMagicText' [EdM4DKF03]")))
       }
       else {
-        val urlsAndDomainsFutures: Vector[Future[SpamCheckResult]] = checkUrlsAndDomains(textAndHtml)
+        val urlsAndDomainsFutures: Vector[Future[SpamCheckResult]] =
+          checkUrlsViaGoogleSafeBrowsingApi(spamCheckTask, textAndHtml) +:
+            checkDomainBlockLists(spamCheckTask, textAndHtml)
+
         // COULD postpone the Akismet check until after the domain check has been done? [5KGUF2]
         // So won't have to pay for Akismet requests, if the site is commercial.
         // Currently the Spamhaus test happens synchronously already though.
@@ -446,19 +463,16 @@ class SpamChecker(
   }
 
 
-  def checkUrlsAndDomains(textAndHtml: TextAndHtml): Vector[Future[SpamCheckResult]] = {
-    checkUrlsViaGoogleSafeBrowsingApi(textAndHtml) +:
-      checkDomainBlockLists(textAndHtml)
-  }
-
-
   val GoogleSafeBrowsingApiDomain = "safebrowsing.googleapis.com"
 
-  def checkUrlsViaGoogleSafeBrowsingApi(textAndHtml: TextAndHtml): Future[SpamCheckResult] = {
+  private def checkUrlsViaGoogleSafeBrowsingApi(spamCheckTask: SpamCheckTask, textAndHtml: TextAndHtml)
+        : Future[SpamCheckResult] = {
     // API: https://developers.google.com/safe-browsing/lookup_guide#HTTPPOSTRequest
     val apiKey = anyGoogleApiKey getOrElse {
       return Future.successful(SpamCheckResult.NoSpam(GoogleSafeBrowsingApiDomain))
     }
+
+    def whichTask = spamCheckTask.sitePostIdRevOrUser
 
     // ".*" tells the url validator to consider all domains valid, even if it doesn't
     // recognize the top level domain.
@@ -477,16 +491,19 @@ class SpamChecker(
     val requestJson = Json.obj(
       "client" -> Json.obj(
         "clientId" -> "Talkyard",
-        "clientVersion" -> talkyardVersion,
+        "clientVersion" -> talkyardVersion),
       "threatInfo" -> Json.obj(
         "threatTypes" -> Json.arr(
-          "THREAT_TYPE_UNSPECIFIED", "MALWARE", "SOCIAL_ENGINEERING",
-          "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"),
+          "THREAT_TYPE_UNSPECIFIED",
+          "MALWARE",
+          "SOCIAL_ENGINEERING",
+          "UNWANTED_SOFTWARE",
+          "POTENTIALLY_HARMFUL_APPLICATION"),
         "platformTypes" -> Json.arr("ANY_PLATFORM"),
         "threatEntryTypes" -> Json.arr("URL"),
-        "threatEntries" -> JsArray(validUrls map { url => Json.obj(
-          "url" -> url
-        )}))))
+        "threatEntries" -> JsArray(validUrls map { url =>
+          Json.obj("url" -> url)
+        })))
     /*
     Example, from Google's docs: (2019-04-15)
     (https://developers.google.com/safe-browsing/v4/lookup-api#checking-urls)
@@ -533,7 +550,7 @@ class SpamChecker(
       }  */
 
     request.post(requestBody).map({ response: WSResponse =>
-      response.status match {
+      try { response.status match {
         case 200 =>
           val json = Json.parse(response.body)
           (json \ "matches").asOpt[JsArray] match {
@@ -548,26 +565,26 @@ class SpamChecker(
               val threatLines = ArrayBuffer[String]()
               var error = false
               for (threatMatchObj <- array.value ; if !error) {
-                val threatType =
-                  (threatMatchObj \ "threatType").asOpt[JsObject] getOrElse "(Unknown threat type)"
-                val platformType =
-                  (threatMatchObj \ "platformType").asOpt[JsObject] getOrElse "(Unknown platform)"
+                val threatType: String =
+                  readOptString(threatMatchObj, "threatType") getOrElse "(Unknown threat type)"
+                val platformType: String =
+                  readOptString(threatMatchObj, "platformType") getOrElse "(Unknown platform)"
                 (threatMatchObj \ "threat").asOpt[JsObject] match {
                   case Some(threatObj) =>
-                    (threatObj \ "url").asOpt[JsString] match {
+                    readOptString(threatObj, "url") match {
                       case Some(badUrl) =>
                         threatLines += s"$threatType for $platformType:\n    $badUrl"
                       case None =>
                         error = true
                         p.Logger.warn(
-                          "Unexpected JSON from Google Safe Browsing API [TyGSAFEAPIJSN01]\n" +
-                          "Reponse body:\n" + response.body)
+                          s"$whichTask: Unexpected JSON from Google Safe Browsing API [TyGSAFEAPIJSN01]" +
+                          s"\nReponse body:\n" + response.body)
                     }
                   case None =>
                     error = true
                     p.Logger.warn(
-                      "Unexpected JSON from Google Safe Browsing API [TyGSAFEAPIJSN02]\n" +
-                      "Reponse body:\n" + response.body)
+                      s"$whichTask: Unexpected JSON from Google Safe Browsing API [TyGSAFEAPIJSN02]" +
+                      s"\nReponse body:\n" + response.body)
                 }
               }
               SpamCheckResult.SpamFound(
@@ -580,8 +597,9 @@ class SpamChecker(
         case weirdStatusCode =>
           // More status codes: https://developers.google.com/safe-browsing/v4/status-codes
           p.Logger.warn(
-            s"Error querying Google Safe Browsing API, status: $weirdStatusCode [TyEGSAFEAPISTS]\n" +
-            "Response body:\n" + response.body)
+            s"$whichTask: Error querying Google Safe Browsing API, " +
+              "status: $weirdStatusCode [TyEGSAFEAPISTS]" +
+              "\nResponse body:\n" + response.body)
           SpamCheckResult.NoSpam(GoogleSafeBrowsingApiDomain)
           /*
           // Google says we shall include the "read more" and "provided by Google"
@@ -624,17 +642,23 @@ class SpamChecker(
           p.Logger.warn(s"Google Safe Browsing API replied with an unexpected status code: $weird")
           None
           */
+      }}
+      catch {
+        case ex: Exception =>
+          p.Logger.warn(s"$whichTask: Error handling Google Safe Browsing API response [TyE5KMRD025]", ex)
+          SpamCheckResult.NoSpam(GoogleSafeBrowsingApiDomain)
       }
     })
       .recover({
         case ex: Exception =>
-          p.Logger.warn(s"Error querying Google Safe Browsing API [TyE4DRRETV20]", ex)
+          p.Logger.warn(s"$whichTask: Error querying Google Safe Browsing API [TyE4DRRETV20]", ex)
           SpamCheckResult.NoSpam(GoogleSafeBrowsingApiDomain)
       })
   }
 
 
-  def checkDomainBlockLists(textAndHtml: TextAndHtml): Vector[Future[SpamCheckResult]] = {
+  def checkDomainBlockLists(spamCheckTask: SpamCheckTask, textAndHtml: TextAndHtml)
+        : Vector[Future[SpamCheckResult]] = {
     /* WHY
     scala> java.net.InetAddress.getAllByName("dbltest.com.dbl.spamhaus.org");  <-- fails the frist time
     java.net.UnknownHostException: dbltest.com.dbl.spamhaus.org: unknown error
