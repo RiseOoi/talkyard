@@ -28,7 +28,6 @@ debiki.scriptLoad = {  // RENAME to tyd.whenStarted(...) ?
 };
 
 
-/* [sw]
 let resolveServiceWorkerPromise;
 let rejectServiceWorkerPromise;
 
@@ -38,9 +37,6 @@ debiki.serviceWorkerPromise = new Promise<ServiceWorker>(function (resolve, reje
   rejectServiceWorkerPromise = reject;
 });
 
-if (!('serviceWorker' in navigator)) {
-  rejectServiceWorkerPromise();
-}  */
 
 const allPostsNotTitleSelector = '.debiki .dw-p:not(.dw-p-ttl)';
 
@@ -289,19 +285,21 @@ function renderPageInBrowser() {
     _.each(scriptLoadDoneCallbacks, function(c) { c(); });
     debiki2.page.PostsReadTracker.start();
 
-    /* [sw] Wait with the service worker, in case is an underpowered mobile phone
+    // [sw] Wait with the service worker, in case is an underpowered mobile phone
     // that's 100% busy downloading things and rendering the page — then don't want the service
     // worker to start before it's probably done. Maybe in the future, it'll download
     // and cache things it, too.
     // Could maybeschedule this timeout, after a done-rendering & downloading event?
+    // if (eds.useServiceWorker) {  <—— todo
     setTimeout(registerServiceWorker, 3500);
-    */
+    // }
   });
 
-  /* [sw]
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) {
       console.log("No service worker. [TyMSWABSENT]");
+      rejectServiceWorkerPromise();
       return;
     }
     var dotMin = '.min';
@@ -323,10 +321,10 @@ function renderPageInBrowser() {
             }
           }, 250)
         }).catch(function(error) {
-          console.log(`Error registering service worker: ${error} [TyESWREGOK]`);
-          setTimeout(rejectServiceWorkerPromise);
+          console.log(`Error registering service worker: ${error} [TyESWREGKO]`);
+          rejectServiceWorkerPromise();
         });
-  } */
+  }
 
   function runNextStep() {
     debiki2.dieIf(!steps.length, "steps is empty [DwE5KPEW2]");

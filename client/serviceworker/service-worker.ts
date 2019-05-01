@@ -29,6 +29,7 @@ declare var clients;
 
 let longPollingReqNr = 0;
 let longPollingPromise = null;
+let justAbortedLongPollingReqNr = -1;
 
 let totalReqNr = 0;
 let numActive = 0;
@@ -36,6 +37,8 @@ let numActive = 0;
 
 oninstall = function(event) {
   console.log("Service worker installed [TyMSWINSTLD]");
+  // Make this the active service worker, for all clients, including any other
+  // already "since long ago" open browser tabs.
   skipWaiting();
 };
 
@@ -49,7 +52,7 @@ onactivate = function(event) {
   // and we can send messages to that tab.
   if (!clients.claim) return;
   event.waitUntil(clients.claim().then(() => {
-    sendToAllBrowserTabs("HELOZZ"); // remove
+    //sendToAllBrowserTabs("HELOZZ"); // remove. Works (2019-05-01)
   }));
 };
 
@@ -66,7 +69,7 @@ onmessage = function(event) {
       const channelId = message.siteId + '-' + message.myId;
       subscribeToServerEvents(channelId);
       break;
-    // TODO: If logged out?
+    // TODO: If logged out? <—
   }
 };
 
@@ -90,6 +93,9 @@ function getNowMs() {
 
 /**
  * Deletes any old event subscription and creates a new for the current user.
+ * If called from many tabs, aborts and restarts "the same" long polling
+ * request many times — which should be fine.
+ * COULD optimize: remember any current channel, and skip abort-resend.
  */
 function subscribeToServerEvents(channelId: string) {
   abortAnyLongPollingRequest();
@@ -239,31 +245,53 @@ function sendLongPollingRequest(channelId: string, successFn: (response) => void
   const pollUrl = `/-/pubsub/subscribe/${channelId}?reqNr=${reqNr}`;
 
   longPollingState.ongoingRequest = fetch(pollUrl, options).then(function(response) {
-    const json = response.json();
-    console.debug(`Long polling request ${reqNr} response [TyMSWLPRRESP]: ${JSON.stringify(json)}`);
-    longPollingState.ongoingRequest = null;
+    // This means the response http headers have arrived — we also need to wait
+    // for the response body.
+
     if (response.status === 200) {
-      longPollingState.lastModified = response.headers.get('Last-Modified');
-      // (In case evil proxy servers remove the Etag header from the response, there's
-      // a workaround, see the Nchan docs:  nchan_subscriber_message_id_custom_etag_header)
-      longPollingState.lastEtag = response.headers.get('Etag');
-      requestDone = true;
-      successFn(json);
+      console.trace(
+          `Long polling request ${reqNr} response headers, status 200 OK [TyMSWLPRHDRS]`);
+      response.json().then(function(json) {
+        longPollingState.ongoingRequest = null;
+        console.debug(`Long polling request ${reqNr} response json [TyMSWLPRRESP]: ` +
+            JSON.stringify(json));
+
+        // Don't bump these until now, when we have the whole response:
+        longPollingState.lastModified = response.headers.get('Last-Modified');
+        // (In case evil proxy servers remove the Etag header from the response, there's
+        // a workaround, see the Nchan docs:  nchan_subscriber_message_id_custom_etag_header)
+        longPollingState.lastEtag = response.headers.get('Etag');
+
+        requestDone = true;
+        successFn(json);
+      }).catch(function(error) {
+        longPollingState.ongoingRequest = null;
+        requestDone = true;
+        console.warn(`Long polling request ${reqNr} failed: got headers, status 200, ` +
+            `but no json [TyESWLP0JSN]`);
+        errorFn(200);
+      });
     }
     else if (response.status === 408) {
       // Fine.
-      console.debug(`Long polling request ${reqNr} done, status 408 Timeout [TyESWLPRTMT]`);
+      console.debug(`Long polling request ${reqNr} done, status 408 Timeout [TyMSWLPRTMT]`);
       resendIfNeeded();
     }
     else {
-      console.warn(`Long polling request  ${reqNr} error response [TyESWLPRERR]`);
+      console.warn(
+          `Long polling request  ${reqNr} error response, status ${response.status} [TyESWLPRERR]`);
       errorFn(response.status);
     }
   }).catch(function(error) {
     longPollingState.ongoingRequest = null;
     requestDone = true;
-    console.warn(`Long polling request ${reqNr} failed, no response [TyESWLPFAIL]`);
-    errorFn(0);
+    if (justAbortedLongPollingReqNr === reqNr) {
+      console.debug(`Long polling request ${reqNr} failed: aborted, fine [TyMSWLPRABRTD]`);
+    }
+    else {
+      console.warn(`Long polling request ${reqNr} failed, no response [TyESWLP0RSP]`);
+      errorFn(0);
+    }
   });
 
   longPollingState.ongoingRequest.anyAbortController = anyAbortController;
@@ -288,6 +316,7 @@ function sendLongPollingRequest(channelId: string, successFn: (response) => void
       return;
     console.debug(`Aborting long polling request ${reqNr} after ${LongPollingSeconds}s [TyMLPRABRT1]`);
     if (currentRequest.anyAbortController) {
+      justAbortedLongPollingReqNr = reqNr;
       currentRequest.anyAbortController.abort();
     }
     // Unless a new request has been started, reset the state.
@@ -309,6 +338,7 @@ function abortAnyLongPollingRequest() {
   if (ongReq) {
     console.debug(`Aborting long polling request ${ongReq.reqNr} [TyMLPRABRT2]`);
     if (ongReq.anyAbortController) {
+      justAbortedLongPollingReqNr = ongReq.reqNr;
       ongReq.anyAbortController.abort();
     }
     longPollingState.ongoingRequest = null;

@@ -30,14 +30,14 @@ const GiveUpAfterTotalMs = 7 * 60 * 1000; // 7 minutes [5AR20ZJ]
 let retryAfterMs = RetryAfterMsDefault;
 let startedFailingAtMs;
 
-/*
-const useSw = 'serviceWorker' in navigator;  [sw]
+
+const useSw = ('serviceWorker' in navigator);  // && eds.useServiceWorker;  [sw]
 
 if (useSw) {
   navigator.serviceWorker.addEventListener('message', function (event) {
     const message = event.data;
     // @ifdef DEBUG
-    console.log(`SW message: ${JSON.stringify(event)}, message: ${JSON.stringify(message)} [TyMGOTSWMSG]`);
+    console.debug(`SW says: ${JSON.stringify(event)}, message: ${JSON.stringify(message)} [TyMGOTSWMSG]`);
     // @endif
 
     switch (message.type) {  // dupl switch, will delete the other one (7QKBAG202)
@@ -53,7 +53,7 @@ if (useSw) {
       case 'disconnected':
         $h.addClasses(document.documentElement, 's_NoInet');
         break;
-    case 'connected':
+      case 'connected':
         $h.removeClasses(document.documentElement, 's_NoInet');
         break;
       case 'eventsBroken':
@@ -65,9 +65,9 @@ if (useSw) {
         // But ... will work in prod mode? Because then caches, no server roundtrip needed?
         Server.loadMoreScriptsBundle(function() {
           util.openDefaultStupidDialog({  // import what?
-            body: "Refresh page to see any latest changes. (There was a disconnection)",  // I18N
-            primaryButtonTitle: "Refresh now",
-            secondaryButonTitle: "Cancel",
+            body: t.ni.PlzRefr,
+            primaryButtonTitle: t.ni.RefrNow,
+            secondaryButonTitle: t.Cancel,
             onCloseOk: function(whichButton) {
               if (whichButton === 1)
                 window.location.reload()
@@ -75,21 +75,19 @@ if (useSw) {
         });
         break;
       default:
-        die("Unknown message type [TyE5KKRWG2]: " + message.type +
+        die("Unknown sw message type [TyEUNKSWMSG]: " + message.type +
             "\n\nThe message body:\n\n" + JSON.stringify(message));
     }
   });
-} */
+}
 
 
 export function subscribeToServerEvents(me: Myself) {
-  /*
   if (useSw) {
-    debiki.serviceWorkerPromise.then(function() {
-    });
     debiki.serviceWorkerPromise.then(function(sw: ServiceWorker) {
-      // DO_AFTER 2019-01-01 add if-DEBUG around, or delete dieIf()
-      //dieIf(!navigator.serviceWorker.controller, "Service worker didn't claim this tab [TyE7KBQT2]");
+      // @ifdef DEBUG
+      dieIf(!navigator.serviceWorker.controller, "Service worker didn't claim this tab [TyESW0CLMTB]");
+      // @endif
       const message: SubscribeToEventsSwMessage = {
         doWhat: SwDo.SubscribeToEvents,
         siteId: eds.siteId,
@@ -100,14 +98,15 @@ export function subscribeToServerEvents(me: Myself) {
     });
   }
   else {
-  */
     subscribeToServerEventsDirectly(me);
-  //}
+  }
 }
 
 
 /**
  * Deletes any old event subscription and creates a new for the current user.
+ * 
+ * Delete later, when talkyard-service-worker is well tested an in use always. [sw]
  */
 function subscribeToServerEventsDirectly(me: Myself) {
   Server.abortAnyLongPollingRequest();
