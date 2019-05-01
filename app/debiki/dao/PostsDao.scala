@@ -1585,6 +1585,7 @@ trait PostsDao {
         browserIdData: BrowserIdData) {
     readWriteTransaction(deletePostImpl(
       pageId, postNr = postNr, deletedById = deletedById, doingReviewTask = None, browserIdData, _))
+    refreshPageInMemCache(pageId)
   }
 
 
@@ -1594,7 +1595,7 @@ trait PostsDao {
       action = PostStatusAction.DeletePost(clearFlags = false), userId = deletedById,
       doingReviewTask = doingReviewTask,
       tx = tx)
-    refreshPageInMemCache(pageId)
+    // The caller needs to: refreshPageInMemCache(pageId) — and should be done just after tx ended.
     result
   }
 

@@ -81,6 +81,9 @@ object BadSpamCheckResponseException extends QuickException
   * Jeff Atwood @ Discourse's list of block lists:
   *   https://meta.discourse.org/t/questionable-account-checks-at-the-time-of-signup/19068/7
   *
+  * Deal w new user *profile* spam:
+  *   https://meta.discourse.org/t/lots-of-spam-new-user-registrations/38925/17
+  *
   * And Discourse's built in spam control:
   * https://meta.discourse.org/t/some-ideas-for-spam-control/10393/4?u=kajmagnus
   * ----- (this text between --- is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License, (c) Jeff Atwood)-----
