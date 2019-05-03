@@ -156,7 +156,7 @@ class SpamChecker(
 
   // Break up the string so if someone copy-pastes this code snippet into ED,
   // it won't be reported as spam.
-  val EdSpamMagicText: PageId = "__ed_spam" + "_test_123__"
+  val TalkyardSpamMagicText: String = "talkyard_spam" + "_test_1234"
 
   // All types: https://blog.akismet.com/2012/06/19/pro-tip-tell-us-your-comment_type/
   object AkismetSpamType {
@@ -243,17 +243,17 @@ class SpamChecker(
       return Future.successful(Nil)
 
     val spamTestFutures: Seq[Future[SpamCheckResult]] =
-      if (spamCheckTask.requestStuff.userName contains EdSpamMagicText) {
+      if (spamCheckTask.requestStuff.userName contains TalkyardSpamMagicText) {
         Seq(Future.successful(SpamCheckResult.SpamFound(
           spamCheckerDomain = "localhost",
           humanReadableMessage =
-            s"Name contains test spam text: '$EdSpamMagicText' [EdM5KSWU7]")))
+            s"Name contains test spam text: '$TalkyardSpamMagicText' [EdM5KSWU7]")))
       }
-      else if (spamCheckTask.requestStuff.userEmail contains EdSpamMagicText) {
+      else if (spamCheckTask.requestStuff.userEmail.exists(_ contains TalkyardSpamMagicText)) {
         Seq(Future.successful(SpamCheckResult.SpamFound(
           spamCheckerDomain = "localhost",
           humanReadableMessage =
-            s"Email contains test spam text: '$EdSpamMagicText' [EdM5KSWU7]")))
+            s"Email contains test spam text: '$TalkyardSpamMagicText' [EdM5KSWU7]")))
       }
       else {
         val stopForumSpamFuture: Future[SpamCheckResult] =
@@ -322,11 +322,11 @@ class SpamChecker(
     val textAndHtml = textAndHtmlMaker.forBodyOrComment(postToSpamCheck.textToSpamCheck)
 
     val spamTestFutures: immutable.Seq[Future[SpamCheckResult]] =
-      if (textAndHtml.text contains EdSpamMagicText) {
+      if (textAndHtml.text contains TalkyardSpamMagicText) {
         Vector(Future.successful(SpamCheckResult.SpamFound(
           spamCheckerDomain = "localhost",
           humanReadableMessage =
-            s"Text contains test spam text: '$EdSpamMagicText' [EdM4DKF03]")))
+            s"Text contains test spam text: '$TalkyardSpamMagicText' [EdM4DKF03]")))
       }
       else {
         val urlsAndDomainsFutures: Vector[Future[SpamCheckResult]] =
