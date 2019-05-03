@@ -37,6 +37,12 @@ debiki.serviceWorkerPromise = new Promise<ServiceWorker>(function (resolve, reje
   rejectServiceWorkerPromise = reject;
 });
 
+let serviceWorkerIsSameVersion = false;
+
+debiki.nowServiceWorkerIsRightVersion = function() {
+  serviceWorkerIsSameVersion = true;
+};
+
 
 const allPostsNotTitleSelector = '.debiki .dw-p:not(.dw-p-ttl)';
 
@@ -204,7 +210,7 @@ function renderPageInBrowser() {
     (<any> window).isServerHtmlStale = true;
     (<any> window).htmlFromServer = htmlBefore;
     (<any> window).htmlAfterReact = htmlAfter;
-    console.log("*** React store checksum mismatch. *** Compare window.htmlFromServer " +
+    console.warn("*** React store checksum mismatch. *** Compare window.htmlFromServer " +
         "with htmlAfterReact to find out what the problem (if any) maybe is.")
   }
   // @endif
@@ -282,23 +288,33 @@ function renderPageInBrowser() {
     // Process any remaining time-ago:s, in case we didn't do all at once earlier.
     // Plus add collapse-thread buttons, for tall threads.
     debiki2.page.Hacks.processPosts();
-    _.each(scriptLoadDoneCallbacks, function(c) { c(); });
     debiki2.page.PostsReadTracker.start();
 
-    // [sw] Wait with the service worker, in case is an underpowered mobile phone
-    // that's 100% busy downloading things and rendering the page — then don't want the service
-    // worker to start before it's probably done. Maybe in the future, it'll download
-    // and cache things it, too.
-    // Could maybeschedule this timeout, after a done-rendering & downloading event?
-    // if (eds.useServiceWorker) {  <—— todo
-    setTimeout(registerServiceWorker, 3500);
-    // }
+    // Start the service worker directly, so, if we're offline, it'll be there to return
+    // cached offline contents. Especially important for mobile phones? With
+    // sometimes poor connectivity.
+    registerServiceWorker();
+
+    debiki.serviceWorkerPromise.then(function(sw) {
+      // The service worker is of the same version as this page js code,
+      // we checked that here [SWSAMEVER].
+      sw.postMessage(<StartMagicTimeSwMessage> {
+        doWhat: SwDo.StartMagicTime,
+        startTimeMs: eds.testNowMs,
+      });
+    }).finally(lastStep);
   });
 
+  function lastStep() {
+    debiki2.startMagicTime(eds.testNowMs);
+    _.each(scriptLoadDoneCallbacks, function(c) { c(); });
+    console.log("Page started. [TyMPGSTRTD]");
+  }
 
-  function registerServiceWorker() {
+
+  function registerServiceWorker() {  // [REGSW]
     if (!('serviceWorker' in navigator)) {
-      console.log("No service worker. [TyMSWABSENT]");
+      console.warn("No service worker — they require HTTPS, or localhost. [TyMSWABSENT]");
       rejectServiceWorkerPromise();
       return;
     }
@@ -306,32 +322,73 @@ function renderPageInBrowser() {
     // @ifdef DEBUG
     dotMin = '';
     // @endif
+
+    // @ifdef DEBUG
+    navigator.serviceWorker.addEventListener('controllerchange', (controllerchangeevent) => {
+      console.log('Service worker controllerchange event: ' + JSON.stringify(controllerchangeevent));
+    });
+    // @endif
+
     navigator.serviceWorker.register(`/talkyard-service-worker${dotMin}.js`)
         .then(function(registration) {
-          console.log("Registered service worker. [TyMSWREGOK]");
-          //registration.onupdatefound = tell the user to refresh the page
+          console.log("Service worker registered. [TyMSWREGOK]");
+          // @ifdef DEBUG
+          registration.onupdatefound = function() {
+            console.debug("New service worker available");
+          };
+          // @endif
+
+          // Optionally, check for new app versions, each hour. This'll download
+          // any new service worker, and (not impl?) here in the page js we'll notice
+          // the service worker starts including a newer version number in its
+          // messages to us — then we can ask the user to reload the page.
+          //setInterval(registration.update, 3600*1000);
+
           const intervalHandle = setInterval(function() {
-            // registration.active defined, doesn't mean we have a service worker.
-            //if (navigator.serviceWorker.controller) {
             if (registration.active) {
               // Now we can start using it. [6KAR3DJ9]
               // However, navigator.serviceWorker.controller might still be absent (weird).
+              // And this is any *old* service worker version? If a new version is being
+              // installed, this'll happen before it's done installed and activated —
+              // so anyone listening for the promise, will get the *old* service
+              // worker (registration.active below).  :- /
+              console.log("Service worker is active. [TyMSWACTV]");
+
+              // @ifdef DEBUG
+              console.log('Ctrl == actv: ' + (navigator.serviceWorker.controller === registration.active));
+              // @endif
+
               clearInterval(intervalHandle);
-              resolveServiceWorkerPromise(registration.active);
+              let i = 0;
+              const waitForCorrectSwVersionHandle = setInterval(function() {
+                if ((i % 30) === 5) {
+                  console.debug("Waiting for the sw to update and claim this tab ... [TyMWAITSWUPD]");
+                }
+                i += 1;
+                navigator.serviceWorker.controller.postMessage(<TellMeYourVersionSwMessage>{
+                  doWhat: SwDo.TellMeYourVersion,
+                });
+                // We're polling this variable, it gets updated on messages from the service
+                // worker. Could optionally use a MessageChannel instead? But this works fine.
+                if (serviceWorkerIsSameVersion) {  // [SWSAMEVER]
+                  console.log(`Service worker is same version: ${SwPageJsVersion} [TyMEQSWVER]`);
+                  clearInterval(waitForCorrectSwVersionHandle);
+                  resolveServiceWorkerPromise(navigator.serviceWorker.controller);
+                }
+              }, 50);
             }
-          }, 250)
+          }, 50)
         }).catch(function(error) {
-          console.log(`Error registering service worker: ${error} [TyESWREGKO]`);
+          console.warn(`Error registering service worker: ${error} [TyESWREGKO]`);
           rejectServiceWorkerPromise();
         });
   }
 
   function runNextStep() {
-    debiki2.dieIf(!steps.length, "steps is empty [DwE5KPEW2]");
     steps[0]();
     steps.shift();
     if (steps.length > 0)
-      setTimeout(runNextStep, 70);
+      setTimeout(runNextStep, 50);
   }
 }
 

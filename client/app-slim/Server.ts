@@ -1645,6 +1645,9 @@ export function testGetLongPollingNr() {
   return longPollingState.nextReqNr - 1;
 }
 
+export function debugSetLongPollingNr(nr: number) {
+  return longPollingState.nextReqNr = nr;
+}
 
 /**
  * Built for talking with Nginx and nchan, see: https://github.com/slact/nchan#long-polling

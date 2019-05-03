@@ -41,6 +41,15 @@ if (useSw) {
     // @endif
 
     switch (message.type) {  // dupl switch, will delete the other one (7QKBAG202)
+      case 'MyVersionIs':
+        console.debug(`Service worker says it's version ${message.swJsVersion} [TyMOKSWVER]`);
+        if (message.swJsVersion === SwPageJsVersion) {
+          // The service worker either was the same version as this page's js
+          // from the beginning, or a matching version was just installed, and
+          // has now claimed this browser tab.
+          debiki.nowServiceWorkerIsRightVersion();
+        }
+        break;
       case 'storePatch':
         ReactActions.patchTheStore(message.data);
         break;
@@ -55,6 +64,7 @@ if (useSw) {
         break;
       case 'connected':
         $h.removeClasses(document.documentElement, 's_NoInet');
+        Server.debugSetLongPollingNr(message.data);
         break;
       case 'eventsBroken':
         // Probably the laptop was disconnected for a short while, maybe suspended,
