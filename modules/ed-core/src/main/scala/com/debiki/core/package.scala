@@ -596,6 +596,10 @@ package object core {
       override def humanReadableMessage: String = "No spam found"
     }
 
+    case class Error(spamCheckerDomain: String) extends SpamCheckResult(false) {
+      override def humanReadableMessage: String = "Error talking with external service"
+    }
+
     /**
       * @param staffMayUnhide — if moderators are allowed to override the spam check result
       *  and show the post, although detected as spam.  Not allowed (i.e. is false)
