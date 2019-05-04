@@ -66,19 +66,19 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
       spamCheckTask.postToSpamCheck.map(_.pageType.toInt).orNullInt,
       spamCheckTask.postToSpamCheck.map(_.pagePublishedAt).orNullTimestamp,
       // There's a constraint, spamcheckqueue_c_texttospamcheck_len, 20200 chars. Maybe 15 000 enough?
-      spamCheckTask.postToSpamCheck.map(_.textToSpamCheck.take(15*1000)).orNullVarchar,
+      spamCheckTask.postToSpamCheck.map(_.textToSpamCheck.take(15*1000)).trimOrNullVarchar,
       spamCheckTask.postToSpamCheck.map(_.language).orNullVarchar,
       spamCheckTask.who.id.asAnyRef,
-      spamCheckTask.who.idCookie.orNullVarchar,
+      spamCheckTask.who.idCookie.trimOrNullVarchar,
       spamCheckTask.who.browserFingerprint.asAnyRef,
-      spamCheckTask.requestStuff.userAgent.orNullVarchar,
-      spamCheckTask.requestStuff.referer.orNullVarchar,
+      spamCheckTask.requestStuff.userAgent.trimOrNullVarchar,
+      spamCheckTask.requestStuff.referer.trimOrNullVarchar,
       spamCheckTask.who.ip,
       spamCheckTask.requestStuff.uri,
-      spamCheckTask.requestStuff.userName.orNullVarchar,
-      spamCheckTask.requestStuff.userEmail.orNullVarchar,
+      spamCheckTask.requestStuff.userName.trimOrNullVarchar,
+      spamCheckTask.requestStuff.userEmail.trimOrNullVarchar,
       spamCheckTask.requestStuff.userTrustLevel.map(_.toInt).orNullInt,
-      spamCheckTask.requestStuff.userUrl.orNullVarchar)
+      spamCheckTask.requestStuff.userUrl.trimOrNullVarchar)
 
     runUpdateSingleRow(statement, values)
   }
