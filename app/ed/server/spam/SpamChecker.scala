@@ -319,7 +319,7 @@ class SpamChecker(
     }
 
     COULD_OPTIMIZE // ? reuse post.approvedHtmlSanitized, if based on currentSource
-    val textAndHtml = textAndHtmlMaker.forBodyOrComment(postToSpamCheck.textToSpamCheck)
+    val textAndHtml = textAndHtmlMaker.forBodyOrComment(postToSpamCheck.htmlToSpamCheck)
 
     val spamTestFutures: immutable.Seq[Future[SpamCheckResult]] =
       if (textAndHtml.text contains TalkyardSpamMagicText) {
@@ -803,11 +803,7 @@ class SpamChecker(
   }
 
 
-  private def makeAkismetRequestBody(spamCheckTask: SpamCheckTask) /*siteOrigin: String,
-      browserIdData: BrowserIdData,
-      spamRelatedStuff: SpamRelReqStuff,
-      pageId: Option[PageId] = None, text: Option[String] = None, user: Option[Participant],
-      anyName: Option[String] = None, anyEmail: Option[String] = None)*/: Option[String] = {
+  private def makeAkismetRequestBody(spamCheckTask: SpamCheckTask): Option[String] = {
 
     val akismetContentType =
       spamCheckTask.postToSpamCheck match {
@@ -870,7 +866,7 @@ class SpamChecker(
     // It's important to send an appropriate value, and this is further explained here.
     body.append("&comment_type=" + akismetContentType)
 
-    val anyTextToCheck = spamCheckTask.postToSpamCheck.map(_.textToSpamCheck)
+    val anyTextToCheck = spamCheckTask.postToSpamCheck.map(_.htmlToSpamCheck)
 
     // Name submitted with the comment.
     val authorName =
@@ -929,7 +925,7 @@ class SpamChecker(
   }
 
 
-  /** Returns num false positives and false negatives reported.
+  /** Returns (num false positives, num false negatives) reported.
     */
   def reportClassificationMistake(spamCheckTask: SpamCheckTask): Future[(Int, Int)] = {
     val promise = Promise[(Int, Int)]()
@@ -938,19 +934,24 @@ class SpamChecker(
       return promise.future
     }
 
+    val humanSaysIsSpam = spamCheckTask.humanSaysIsSpam getOrDie "TyE205MKAS2"
+
     val resultJson = spamCheckTask.resultJson.getOrDie("TyE306SK2")
     val akismetResultJson = (resultJson \ AkismetDomain).asOpt[JsObject]
-    val akismetSaysIsSpam = akismetResultJson map { json =>
-      (json \ "spamFound").asOpt[Boolean] getOrElse {  // written here [02MRHL2]
-        promise.success((0, 0)); die("TyE58MK3RT2", "spamFound field missing")}
+    val akismetSaysIsSpam: Option[Boolean] = akismetResultJson map { json =>
+      (json \ "isSpam").asOpt[Boolean] getOrElse {  // written here [02MRHL2]
+        promise.success((0, 0))
+        die("TyE58MK3RT2", "isSpam field missing")
+      }
     }
 
     val siteId = spamCheckTask.siteId
     val postId = spamCheckTask.postToSpamCheck.map(_.postId) getOrElse NoPostId
 
-    if (spamCheckTask.humanSaysIsSpam == akismetSaysIsSpam) {
-      // Some spam check service other than Akismet misclassified this, and it doesn't
-      // accept feedback about mistakes. Nothing to do.
+    if (akismetResultJson.isEmpty || akismetSaysIsSpam.is(humanSaysIsSpam)) {
+      // We didn't use Akismet, or the human reviewer agrees with Akismet's result.
+      // Meaning, a spam check service other than Akismet misclassified this — and
+      // it doesn't accept feedback about mistakes. Nothing to do.
       promise.success((0, 0))
     }
     else {
@@ -965,6 +966,7 @@ class SpamChecker(
           val doWhat = spamCheckTask.humanSaysIsSpam.is(true) ? "submit-spam" | "submit-ham"
           makeAkismetRequestBody(spamCheckTask) match {
             case None =>
+              // Weird. Couldn't construct request. Warning logged already.
               promise.success((0, 0))
             case Some(requsetBody) =>
               sendAkismetRequest(anyAkismetKey.get, what = doWhat, payload = requsetBody).map({
@@ -976,7 +978,8 @@ class SpamChecker(
                   }
                   p.Logger.debug(s"s$siteId: Reported $doWhat to Akismet, post id $postId [TyM602MBWT]")
                   promise.success(
-                    // (a, b) and a = false positive, i.e. Akismet thought "It's spam", when it wasn't.
+                    // Return (a, b) where a = num false positives, i.e. Akismet thought
+                    // "It's spam", when it wasn't, and b = num false negatives.
                     akismetSaysIsSpam.is(true) ? (1, 0) | (0, 1))
                 }
                 else {
@@ -995,6 +998,9 @@ class SpamChecker(
                 })
           }
         case _ =>
+          // No Akismet API key, but still we have a result from Akismet. Could be that the
+          // key just expired? In between the comment-check and the submit-spam/ham requests.
+          // We have logged any [API key is invalid] log message already.
           promise.success((0, 0))
       }
     }

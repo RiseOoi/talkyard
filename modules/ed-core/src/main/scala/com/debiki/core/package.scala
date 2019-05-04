@@ -487,8 +487,8 @@ package object core {
     postRevNr: Int,
     pageId: PageId,
     pageType: PageType,
-    pagePublishedAt: When,
-    textToSpamCheck: String,
+    pageAvailableAt: When,  // publication date, or if not published, the creation date
+    htmlToSpamCheck: String,
     language: String)
 
 
@@ -542,7 +542,7 @@ package object core {
 
     def postToSpamCheckShort: Option[PostToSpamCheck] =
       postToSpamCheck map { p =>
-        p.copy(textToSpamCheck = p.textToSpamCheck.take(1000))
+        p.copy(htmlToSpamCheck = p.htmlToSpamCheck.take(1000))
       }
 
     def siteUserId = SiteUserId(siteId, who.id)
@@ -569,9 +569,10 @@ package object core {
   }
 
 
+  /** Spam check results from different external services, for a single post or user profile. */
   type SpamCheckResults = immutable.Seq[SpamCheckResult]
 
-  sealed abstract class SpamCheckResult(val spamFound: Boolean) {
+  sealed abstract class SpamCheckResult(val isSpam: Boolean) {
     def spamCheckerDomain: String
     def humanReadableMessage: String
   }

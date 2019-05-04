@@ -479,8 +479,8 @@ object RdbUtil {
         postRevNr = rs.getInt("post_rev_nr"),
         pageId = rs.getString("page_id"),
         pageType = PageType.fromInt(rs.getInt("page_type")).getOrDie("TyE049RKT2"),
-        pagePublishedAt = getWhen(rs, "page_published_at"),
-        textToSpamCheck = getString(rs, "text_to_spam_check"),
+        pageAvailableAt = getWhen(rs, "page_published_at"),
+        htmlToSpamCheck = getString(rs, "text_to_spam_check"),
         language = getString(rs, "language"))
     }
 
