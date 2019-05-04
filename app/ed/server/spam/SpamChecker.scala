@@ -835,6 +835,8 @@ class SpamChecker(
     }
 
     // Documentation: https://akismet.com/development/api/#comment-check
+    // Akismet want all fields to be the same, later when reporting classification mistakes, [AKISMET]
+    // as when constructing the initial comment-check request.
 
     // (required) The front page or home URL of the instance making the request.
     // For a blog or wiki this would be the front page. Note: Must be
@@ -936,7 +938,7 @@ class SpamChecker(
 
     val humanSaysIsSpam = spamCheckTask.humanSaysIsSpam getOrDie "TyE205MKAS2"
 
-    val resultJson = spamCheckTask.resultJson.getOrDie("TyE306SK2")
+    val resultJson = spamCheckTask.resultsJson.getOrDie("TyE306SK2")
     val akismetResultJson = (resultJson \ AkismetDomain).asOpt[JsObject]
     val akismetSaysIsSpam: Option[Boolean] = akismetResultJson map { json =>
       (json \ "isSpam").asOpt[Boolean] getOrElse {  // written here [02MRHL2]

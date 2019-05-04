@@ -116,9 +116,9 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
         post_rev_nr = ?
       """
     val values = List(
-      spamCheckTask.resultAt.orNullTimestamp,
-      spamCheckTask.resultJson.orNullJson,
-      spamCheckTask.resultText.orNullVarchar,
+      spamCheckTask.resultsAt.orNullTimestamp,
+      spamCheckTask.resultsJson.orNullJson,
+      spamCheckTask.resultsText.orNullVarchar,
       spamCheckTask.numIsSpamResults.orNullInt,
       spamCheckTask.numNotSpamResults.orNullInt,
       spamCheckTask.humanSaysIsSpam.orNullBoolean,

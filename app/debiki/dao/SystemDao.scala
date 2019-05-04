@@ -416,10 +416,10 @@ class SystemDao(
 
     val spamCheckTaskWithResults: SpamCheckTask =
       spamCheckTaskNoResults.copy(
-        resultAt = Some(globals.now()),
-        resultJson = Some(JsObject(spamCheckResults.map(r =>
+        resultsAt = Some(globals.now()),
+        resultsJson = Some(JsObject(spamCheckResults.map(r =>
             r.spamCheckerDomain -> JsX.JsSpamCheckResult(r)))),
-        resultText = Some(spamCheckResults.map(r => i"""
+        resultsText = Some(spamCheckResults.map(r => i"""
             |${r.spamCheckerDomain}:
             |${r.humanReadableMessage}""").mkString("------").trim),
         numIsSpamResults = Some(numIsSpamResults),
@@ -444,7 +444,7 @@ class SystemDao(
       val postAfter = postBefore.copy(
         bodyHiddenAt = Some(siteTx.now.toJavaDate),
         bodyHiddenById = Some(SystemUserId),
-        bodyHiddenReason = Some(s"Is spam or malware?:\n\n" + spamCheckTaskWithResults.resultText))
+        bodyHiddenReason = Some(s"Is spam or malware?:\n\n" + spamCheckTaskWithResults.resultsText))
 
       val reviewTask: ReviewTask = PostsDao.createOrAmendOldReviewTask(
         createdById = SystemUserId, postAfter, reasons = Vector(ReviewReason.PostIsSpam),

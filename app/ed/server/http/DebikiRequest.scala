@@ -99,8 +99,8 @@ abstract class DebikiRequest[A] {
     userAgent = headers.get("User-Agent"),
     referer = request.headers.get("referer"),
     uri = uri,
-    userName = user.map(_.usernameOrGuestName),
-    userEmail = user.map(_.email),
+    userName = user.map(_.usernameSpaceOtherName).trimNoneIfBlank,
+    userEmail = user.map(_.email).trimNoneIfBlank,
     userUrl = None,
     userTrustLevel = user.map(_.effectiveTrustLevel))
 
