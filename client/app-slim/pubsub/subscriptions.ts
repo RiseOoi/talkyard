@@ -31,9 +31,7 @@ let retryAfterMs = RetryAfterMsDefault;
 let startedFailingAtMs;
 
 
-const useSw = ('serviceWorker' in navigator);  // && eds.useServiceWorker;  [sw]
-
-if (useSw) {
+if (eds.useServiceWorker) {
   navigator.serviceWorker.addEventListener('message', function (event) {
     const message = event.data;
     // @ifdef DEBUG
@@ -93,7 +91,7 @@ if (useSw) {
 
 
 export function subscribeToServerEvents(me: Myself) {
-  if (useSw) {
+  if (eds.useServiceWorker) {
     debiki.serviceWorkerPromise.then(function(sw: ServiceWorker) {
       // @ifdef DEBUG
       dieIf(!navigator.serviceWorker.controller, "Service worker didn't claim this tab [TyESW0CLMTB]");

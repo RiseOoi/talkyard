@@ -251,9 +251,7 @@ function renderPageInBrowser() {
 
   steps.push(function() {
     registerEventHandlersFireLoginOut();
-    // if (eds.useServiceWorker) {
     registerServiceWorkerWaitForSameVersion();
-    // }
 
     debiki2.utils.startDetectingMouse();
     debiki2.ReactActions.doUrlFragmentAction();
@@ -320,8 +318,14 @@ function renderPageInBrowser() {
 
 
 function registerServiceWorkerWaitForSameVersion() {  // [REGSW]
-  if (!('serviceWorker' in navigator)) {
-    console.warn("No service worker — they require HTTPS, or localhost. [TyMSWABSENT]");
+  if (!eds.useServiceWorker) {
+    if (eds.wantsServiceWorker) {
+      console.warn("Cannot use any service worker — they require HTTPS or http://localhost, " +
+          "not incognito mode. [TyMSWMISSNG]");
+    }
+    else {
+      console.log("Not using any service worker. [TyMSWSKIPD]");
+    }
     rejectServiceWorkerPromise();
     return;
   }
@@ -386,7 +390,7 @@ function registerServiceWorkerWaitForSameVersion() {  // [REGSW]
           // This variable gets updated when the service worker replies to the messages
           // we send just above. (Could use a MessageChannel instead? But this works fine.)
           if (serviceWorkerIsSameVersion) {  // [SWSAMEVER]
-            console.log(`Service worker is same version: ${SwPageJsVersion}, good [TyMEQSWVER]`);
+            console.log(`Service worker is same version: ${SwPageJsVersion}, fine [TyMEQSWVER]`);
             clearInterval(intervalHandle);
             resolveServiceWorkerPromise(theServiceWorker);
           }
