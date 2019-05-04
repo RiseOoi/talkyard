@@ -24,7 +24,9 @@
 // worker happily talk with each other.
 // 2) If the sw js is newer, it'll reject messages from the page,
 // and tell the page to show a dialog "Please refresh. New version available".
-const SwPageJsVersion = '0.0.007';
+// This is a separate version number, so won't need to reinstall the service
+// worker, if it didn't change. Hmm?
+const SwPageJsVersion = '0.0.0012';
 
 const ReactStartedClass = 'dw-react-started';
 

@@ -69,6 +69,9 @@ onactivate = function(event) {
   // service worker (until after tab reload), since it was loaded outside any service worker
   // — unless we claim() it — then, subsequent fetches (http requests) will be via this
   // service worker, and we can send messages to that tab.
+  // Or, if there's an old service worker already installed, the page is currently
+  // using that one, and we need to claim() the page so it'll start using this new
+  // service worker instad. [SWCLMTBS]
   // Nice: https://serviceworke.rs/immediate-claim_service-worker_doc.html
   if (!clients.claim) return;
   event.waitUntil(clients.claim().then(() => {

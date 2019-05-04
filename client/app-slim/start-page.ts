@@ -251,6 +251,10 @@ function renderPageInBrowser() {
 
   steps.push(function() {
     registerEventHandlersFireLoginOut();
+    // if (eds.useServiceWorker) {
+    registerServiceWorkerWaitForSameVersion();
+    // }
+
     debiki2.utils.startDetectingMouse();
     debiki2.ReactActions.doUrlFragmentAction();
 
@@ -290,11 +294,6 @@ function renderPageInBrowser() {
     debiki2.page.Hacks.processPosts();
     debiki2.page.PostsReadTracker.start();
 
-    // Start the service worker directly, so, if we're offline, it'll be there to return
-    // cached offline contents. Especially important for mobile phones? With
-    // sometimes poor connectivity.
-    registerServiceWorker();
-
     debiki.serviceWorkerPromise.then(function(sw) {
       // The service worker is of the same version as this page js code,
       // we checked that here [SWSAMEVER].
@@ -311,85 +310,91 @@ function renderPageInBrowser() {
     console.log("Page started. [TyMPGSTRTD]");
   }
 
-
-  function registerServiceWorker() {  // [REGSW]
-    if (!('serviceWorker' in navigator)) {
-      console.warn("No service worker — they require HTTPS, or localhost. [TyMSWABSENT]");
-      rejectServiceWorkerPromise();
-      return;
-    }
-    var dotMin = '.min';
-    // @ifdef DEBUG
-    dotMin = '';
-    // @endif
-
-    // @ifdef DEBUG
-    navigator.serviceWorker.addEventListener('controllerchange', (controllerchangeevent) => {
-      console.log('Service worker controllerchange event: ' + JSON.stringify(controllerchangeevent));
-    });
-    // @endif
-
-    navigator.serviceWorker.register(`/talkyard-service-worker${dotMin}.js`)
-        .then(function(registration) {
-          console.log("Service worker registered. [TyMSWREGOK]");
-          // @ifdef DEBUG
-          registration.onupdatefound = function() {
-            console.debug("New service worker available");
-          };
-          // @endif
-
-          // Optionally, check for new app versions, each hour. This'll download
-          // any new service worker, and (not impl?) here in the page js we'll notice
-          // the service worker starts including a newer version number in its
-          // messages to us — then we can ask the user to reload the page.
-          //setInterval(registration.update, 3600*1000);
-
-          const intervalHandle = setInterval(function() {
-            if (registration.active) {
-              // Now we can start using it. [6KAR3DJ9]
-              // However, navigator.serviceWorker.controller might still be absent (weird).
-              // And this is any *old* service worker version? If a new version is being
-              // installed, this'll happen before it's done installed and activated —
-              // so anyone listening for the promise, will get the *old* service
-              // worker (registration.active below).  :- /
-              console.log("Service worker is active. [TyMSWACTV]");
-
-              // @ifdef DEBUG
-              console.log('Ctrl == actv: ' + (navigator.serviceWorker.controller === registration.active));
-              // @endif
-
-              clearInterval(intervalHandle);
-              let i = 0;
-              const waitForCorrectSwVersionHandle = setInterval(function() {
-                if ((i % 30) === 5) {
-                  console.debug("Waiting for the sw to update and claim this tab ... [TyMWAITSWUPD]");
-                }
-                i += 1;
-                navigator.serviceWorker.controller.postMessage(<TellMeYourVersionSwMessage>{
-                  doWhat: SwDo.TellMeYourVersion,
-                });
-                // We're polling this variable, it gets updated on messages from the service
-                // worker. Could optionally use a MessageChannel instead? But this works fine.
-                if (serviceWorkerIsSameVersion) {  // [SWSAMEVER]
-                  console.log(`Service worker is same version: ${SwPageJsVersion} [TyMEQSWVER]`);
-                  clearInterval(waitForCorrectSwVersionHandle);
-                  resolveServiceWorkerPromise(navigator.serviceWorker.controller);
-                }
-              }, 50);
-            }
-          }, 50)
-        }).catch(function(error) {
-          console.warn(`Error registering service worker: ${error} [TyESWREGKO]`);
-          rejectServiceWorkerPromise();
-        });
-  }
-
   function runNextStep() {
     steps[0]();
     steps.shift();
     if (steps.length > 0)
       setTimeout(runNextStep, 50);
   }
+}
+
+
+function registerServiceWorkerWaitForSameVersion() {  // [REGSW]
+  if (!('serviceWorker' in navigator)) {
+    console.warn("No service worker — they require HTTPS, or localhost. [TyMSWABSENT]");
+    rejectServiceWorkerPromise();
+    return;
+  }
+
+  var dotMin = '.min';
+  // @ifdef DEBUG
+  dotMin = '';
+  // @endif
+
+  navigator.serviceWorker.addEventListener('controllerchange', (controllerchangeevent) => {
+    console.log("Service worker controllerchange event [TyMSWCTRCHG]");
+  });
+
+  navigator.serviceWorker.register(`/talkyard-service-worker${dotMin}.js`)
+      .then(function(registration) {
+        console.log("Service worker registered. [TyMSWREGOK]");
+        registration.onupdatefound = function() {
+          console.log("New service worker available [TyMNWSWAVL]");
+        };
+
+        // Optionally, check for new app versions, each hour. This'll download
+        // any new service worker, and (not impl?) here in the page js we'll notice
+        // the service worker starts including a newer version number in its
+        // messages to us — then we can ask the user to reload the page. [NEWSWVER]
+        //
+        //setInterval(registration.update, 3600*1000);
+
+        // Wait until a service worker of the same version as this code, is
+        // active. Then, resolve the service worker promise:
+
+        let i = 0;
+        const intervalHandle = setInterval(function() {
+          // This is null until a service worker — possibly an old version we don't want
+          // to use — has been installed and activated and handles this browser tab.
+          const theServiceWorker = navigator.serviceWorker.controller;
+          if (!theServiceWorker)
+            return;
+
+          i += 1;
+
+          // There's *some* service worker for this browser tab, but is it the wrong version?
+          // When the page loads, that'll happen using the currently installed service
+          // worker, possibly an old version, could be a year old, if the user hasn't
+          // visited this site in a year.
+          // It's *error prone* to write code that works with arbitrarily old service workers?
+          // So if it's of a different (older) version, wait until the new one we
+          // started installing above, has claimed [SWCLMTBS] this browser tab. Let's
+          // poll-ask the service worker about its version, until it's the same version.
+          // (Or if newer version — should tell user to refresh page [NEWSWVER]. Not impl.)
+          if (i === 1)
+            console.log("Service worker active — but which version? [TyMSWACTV]");
+
+          if ((i % 20) === 4)
+            console.log("Waiting for service worker to maybe update ... [TyMWAITSWUPD]");
+
+          // Poll the service worker's version: it replies to this message, with
+          // its version number.
+          theServiceWorker.postMessage(<TellMeYourVersionSwMessage> {
+            doWhat: SwDo.TellMeYourVersion,
+          });
+
+          // This variable gets updated when the service worker replies to the messages
+          // we send just above. (Could use a MessageChannel instead? But this works fine.)
+          if (serviceWorkerIsSameVersion) {  // [SWSAMEVER]
+            console.log(`Service worker is same version: ${SwPageJsVersion}, good [TyMEQSWVER]`);
+            clearInterval(intervalHandle);
+            resolveServiceWorkerPromise(theServiceWorker);
+          }
+        }, 50)
+      }).catch(function(error) {
+        console.warn(`Error registering service worker: ${error} [TyESWREGKO]`);
+        rejectServiceWorkerPromise();
+      });
 }
 
 

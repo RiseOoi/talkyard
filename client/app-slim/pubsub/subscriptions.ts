@@ -103,8 +103,7 @@ export function subscribeToServerEvents(me: Myself) {
         siteId: eds.siteId,
         myId: me.id,
       };
-      //navigator.serviceWorker.controller.postMessage(message);  // [6KAR3DJ9]
-      sw.postMessage(message);  // [6KAR3DJ9]
+      sw.postMessage(message);
     });
   }
   else {
