@@ -104,6 +104,8 @@ export function subscribeToServerEvents(me: Myself) {
         talkyardVersion: TalkyardVersion,
       };
       sw.postMessage(message);
+    }).catch(ex => {
+      console.log("Error subscribing to events via service worker", ex);
     });
   }
   else {

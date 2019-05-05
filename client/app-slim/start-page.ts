@@ -300,6 +300,9 @@ function renderPageInBrowser() {
         startTimeMs: eds.testNowMs,
         talkyardVersion: TalkyardVersion,
       });
+    }).catch(function() {
+      // Fine. Message already logged. (This empty catch is needed, otherwise
+      // Chrome logs an error about an uncaught promise failure.)
     }).finally(lastStep);
   });
 
@@ -327,7 +330,7 @@ function registerServiceWorkerWaitForSameVersion() {  // [REGSW]
     else {
       console.log("Not using any service worker. [TyMSWSKIPD]");
     }
-    rejectServiceWorkerPromise();
+    rejectServiceWorkerPromise('ok');
     return;
   }
 
@@ -402,9 +405,9 @@ function registerServiceWorkerWaitForSameVersion() {  // [REGSW]
             resolveServiceWorkerPromise(theServiceWorker);
           }
         }, 50)
-      }).catch(function(error) {
-        console.warn(`Error registering service worker: ${error} [TyESWREGKO]`);
-        rejectServiceWorkerPromise();
+      }).catch(function(ex) {
+        console.error("Error registering service worker [TyESWREGKO]", ex);
+        rejectServiceWorkerPromise(ex);
       });
 }
 
