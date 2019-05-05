@@ -16,7 +16,7 @@ alter table spam_check_queue3 add column author_url varchar;
 alter table spam_check_queue3 add column html_to_spam_check varchar;
 alter table spam_check_queue3 add column language varchar;
 
-alter table spam_check_queue3 add constraint spamcheckqueue_c_results_null_eq check (
+alter table spam_check_queue3 add constraint spamcheckqueue_c_post_null_eq check (
     (post_id is null) = (post_nr is null) and
     (post_id is null) = (post_rev_nr is null) and
     (post_id is null) = (page_id is null) and
@@ -24,7 +24,7 @@ alter table spam_check_queue3 add constraint spamcheckqueue_c_results_null_eq ch
     (post_id is null) = (page_available_at is null) and
     (post_id is null) = (language is null));
 
-alter table spam_check_queue3 add constraint spamcheckqueue_c_results_null_eq check (
+alter table spam_check_queue3 add constraint spamcheckqueue_c_post_html_null check (
     (post_id is null) or (html_to_spam_check is not null));
 
 alter table spam_check_queue3 add constraint spamcheckqueue_c_authorname_len check (
@@ -36,8 +36,8 @@ alter table spam_check_queue3 add constraint spamcheckqueue_c_authoremailaddr_le
 alter table spam_check_queue3 add constraint spamcheckqueue_c_authorurl_len check (
     length(author_url) between 1 and 200);
 
-alter table spam_check_queue3 add constraint spamcheckqueue_c_texttospamcheck_len check (
-    length(text_to_spam_check) between 1 and 20200);
+alter table spam_check_queue3 add constraint spamcheckqueue_c_htmltospamcheck_len check (
+    length(html_to_spam_check) between 1 and 20200);
 
 alter table spam_check_queue3 add constraint spamcheckqueue_c_language_len check (
     length(language) between 1 and 200);

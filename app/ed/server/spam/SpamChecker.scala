@@ -764,6 +764,7 @@ class SpamChecker(
 
   private def sendAkismetCheckSpamRequest(apiKey: String, payload: String,
         promise: Promise[(Boolean, Boolean)]) {
+    p.Logger.debug("Sending Akismet spam check request...")  // replace with tracing instead [TRACING]
     sendAkismetRequest(apiKey, what = "comment-check", payload = payload).map({ response: WSResponse =>
       val body = response.body
       body.trim match {
@@ -792,7 +793,6 @@ class SpamChecker(
 
 
   private def makeAkismetRequestBody(spamCheckTask: SpamCheckTask): Option[String] = {
-
     val akismetContentType =
       spamCheckTask.postToSpamCheck match {
         case None => AkismetSpamType.Signup
@@ -952,6 +952,7 @@ class SpamChecker(
               // Weird. Couldn't construct request. Warning logged already.
               promise.success((0, 0))
             case Some(requestBody) =>
+              p.Logger.debug(s"Sending Akismet correction to: $doWhat")  // replace w tracing [TRACING]
               sendAkismetRequest(anyAkismetKey.get, what = doWhat, payload = requestBody).map({
                     response: WSResponse =>
                 val responseBody = response.body

@@ -1367,7 +1367,11 @@ trait PostsDao {
     // pending spam check task, so we can send a training sample to any spam check services.
     // (If we're delting a whole sub tree of posts, let's only mark the first one as spam —
     // the one explicitly getting deleted. Anything else would be too complicated.)
-    updateSpamCheckTaskBecausePostDeleted(postBefore, postAuthor, deleter = user, tx)
+    if (postsDeleted.exists(_.id == postBefore.id)) {
+      dieIf(!action.isInstanceOf[PostStatusAction.DeletePost] &&
+          action != PostStatusAction.DeleteTree, "TyE205MKSD")
+      updateSpamCheckTaskBecausePostDeleted(postBefore, postAuthor, deleter = user, tx)
+    }
 
     // COULD update database to fix this. (Previously, chat pages didn't count num-chat-messages.)
     val isChatWithWrongReplyCount =
