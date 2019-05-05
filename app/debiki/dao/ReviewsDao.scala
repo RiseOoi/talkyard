@@ -244,7 +244,7 @@ trait ReviewsDao {
     }
 
     val spamCheckTasksAnyRevNr: Seq[SpamCheckTask] =
-      tx.loadPendingSpamCheckTasksForPostLatestLast(postId)
+      tx.loadSpamCheckTasksWaitingForHumanLatestLast(postId)
 
     // Which spam check task shall we update? (WHICHTASK) There might be many,
     // for different revisions of the same post (because edits are spam checked, too).
@@ -298,7 +298,7 @@ trait ReviewsDao {
 
     // Which spam check task(s) shall we update? If there're many, for different
     // revision of the same post? The last one? see: (WHICHTASK)
-    val spamCheckTasksAnyRevNr = tx.loadPendingSpamCheckTasksForPostLatestLast(post.id)
+    val spamCheckTasksAnyRevNr = tx.loadSpamCheckTasksWaitingForHumanLatestLast(post.id)
     val latestTask = spamCheckTasksAnyRevNr.lastOption
     /* Alternatively:
     val spamCheckTaskSameRevNr =

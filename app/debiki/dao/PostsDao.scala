@@ -104,6 +104,8 @@ trait PostsDao {
         now: When, authorId: UserId, tx: SiteTransaction, skipNotifications: Boolean = false)
         : (Post, Participant, Notifications, Option[ReviewTask]) = {
 
+    require(textAndHtml.safeHtml.trim.nonEmpty, "TyE25JP5L2")
+
     val authorAndLevels = loadUserAndLevels(byWho, tx)
     val author = authorAndLevels.user
     val page = PageDao(pageId, tx)
@@ -490,6 +492,8 @@ trait PostsDao {
   private def createNewChatMessage(page: PageDao, textAndHtml: TextAndHtml, who: Who,
       spamRelReqStuff: SpamRelReqStuff, tx: SiteTransaction): (Post, Notifications) = {
 
+    require(textAndHtml.safeHtml.trim.nonEmpty, "TyE592MWP2")
+
     // Note: Farily similar to insertReply() a bit above. [4UYKF21]
     val authorId = who.id
     val authorAndLevels = loadUserAndLevels(who, tx)
@@ -614,8 +618,9 @@ trait PostsDao {
     // Note: Farily similar to editPostIfAuth() just below. [2GLK572]
     val authorId = byWho.id
 
-    dieIf(lastPost.tyype != PostType.ChatMessage, "EsE6YUW2", o"""Post id ${lastPost.id}
-          is not a chat message""")
+    require(textAndHtml.safeHtml.trim.isEmpty, "TyE8FPZE2P")
+    require(lastPost.tyype == PostType.ChatMessage, o"""Post id ${lastPost.id}
+          is not a chat message, it is: ${lastPost.tyype} [TyE6YUW28]""")
 
     require(lastPost.currentRevisionById == authorId, "EsE5JKU0")
     require(lastPost.currentRevSourcePatch.isEmpty, "EsE7YGKU2")

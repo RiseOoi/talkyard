@@ -38,8 +38,8 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
         post_rev_nr,
         page_id,
         page_type,
-        page_published_at,
-        text_to_spam_check,
+        page_available_at,
+        html_to_spam_check,
         language,
         author_id,
         browser_id_cookie,
@@ -84,13 +84,13 @@ trait SpamCheckQueueDaoMixin extends SiteTransaction {
   }
 
 
-  def loadPendingSpamCheckTasksForPostLatestLast(postId: PostId): immutable.Seq[SpamCheckTask] = {
+  def loadSpamCheckTasksWaitingForHumanLatestLast(postId: PostId): immutable.Seq[SpamCheckTask] = {
     val query = s"""
       select * from spam_check_queue3
       where
         site_id = ? and
         post_id = ? and
-        misclassifications_reported_at is null
+        human_says_is_spam is null
       order by created_at
       """
     val values = List(siteId.asAnyRef, postId.asAnyRef)

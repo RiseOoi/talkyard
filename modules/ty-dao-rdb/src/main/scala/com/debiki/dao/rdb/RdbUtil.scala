@@ -478,12 +478,13 @@ object RdbUtil {
         postNr = rs.getInt("post_nr"),
         postRevNr = rs.getInt("post_rev_nr"),
         pageId = rs.getString("page_id"),
-        pageType = PageType.fromInt(rs.getInt("page_type")).getOrDie("TyE049RKT2"),
-        pageAvailableAt = getWhen(rs, "page_published_at"),
-        htmlToSpamCheck = getString(rs, "text_to_spam_check"),
+        pageType = PageType.fromInt(rs.getInt("page_type")).getOrElse(PageType.Discussion),
+        pageAvailableAt = getWhen(rs, "page_available_at"),
+        htmlToSpamCheck = getString(rs, "html_to_spam_check"),
         language = getString(rs, "language"))
     }
 
+    // Dupl data, can be derived from the other fields. Included for simpler queries.
     val anyIsMisclassified = getOptBool(rs, "is_misclassified")
 
     val result = SpamCheckTask(
@@ -497,8 +498,8 @@ object RdbUtil {
           idCookie = getOptString(rs, "browser_id_cookie"),
           fingerprint = rs.getInt("browser_fingerprint"))),
       requestStuff = SpamRelReqStuff(
-        userAgent = getOptionalStringNotEmpty(rs, "req_user_agent"),
-        referer = getOptionalStringNotEmpty(rs, "req_referer"),
+        userAgent = getOptString(rs, "req_user_agent"),
+        referer = getOptString(rs, "req_referer"),
         uri = rs.getString("req_uri"),
         userName = getOptString(rs, "author_name"),
         userEmail = getOptString(rs, "author_email_addr"),

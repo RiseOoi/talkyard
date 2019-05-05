@@ -496,7 +496,11 @@ package object core {
     pageType: PageType,
     pageAvailableAt: When,  // publication date, or if not published, the creation date
     htmlToSpamCheck: String,
-    language: String)
+    language: String) {
+
+    require(language.trim.nonEmpty, "TyE402MR4Q")
+    require(htmlToSpamCheck.trim.nonEmpty, "TyE402MR45")
+  }
 
 
   /** Primary key = site id, post id and also pots revision nr, so that if
