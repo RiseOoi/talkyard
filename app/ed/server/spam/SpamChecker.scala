@@ -29,6 +29,7 @@ import play.api.libs.ws._
 import play.api.libs.json.{JsArray, JsObject, JsString, Json}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.immutable
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.Future.successful
 import scala.util.Success
@@ -216,6 +217,7 @@ class SpamChecker(
         play.api.http.HeaderNames.CONTENT_TYPE -> ContentType,
         play.api.http.HeaderNames.USER_AGENT -> UserAgent,
         play.api.http.HeaderNames.CONTENT_LENGTH -> postData.length.toString)
+        .withRequestTimeout(7.seconds)
 
     request.post(postData).map({ response: WSResponse =>
       val body = response.body
@@ -386,7 +388,9 @@ class SpamChecker(
       if (ipAddr.startsWith("[") || ipAddr.contains(":")) ""
       else  "&ip=" + encode(ipAddr)
     val encodedEmail = encode(spamCheckTask.requestStuff.userEmail getOrElse "")
-    wsClient.url(s"https://$StopForumSpamDomain/api?email=$encodedEmail$anyIpParam&f=json").get()
+    wsClient.url(s"https://$StopForumSpamDomain/api?email=$encodedEmail$anyIpParam&f=json")
+      .withRequestTimeout(7.seconds)
+      .get()
       .map(handleStopForumSpamResponse)
       .recover({
         case ex: Exception =>
@@ -515,6 +519,7 @@ class SpamChecker(
     val request: WSRequest =
       wsClient.url(safeBrowsingApiUrl).withHttpHeaders(
         play.api.http.HeaderNames.CONTENT_LENGTH -> requestBody.length.toString)
+        .withRequestTimeout(7.seconds)
 
     /*
     Google's response is like: (2019-04-15)
@@ -758,6 +763,7 @@ class SpamChecker(
         play.api.http.HeaderNames.CONTENT_TYPE -> ContentType,
         play.api.http.HeaderNames.USER_AGENT -> UserAgent,
         play.api.http.HeaderNames.CONTENT_LENGTH -> payload.length.toString)
+        .withRequestTimeout(7.seconds)
     request.post(payload)
   }
 

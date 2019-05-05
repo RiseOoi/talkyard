@@ -25,6 +25,7 @@ import debiki.EdHttp.throwForbidden
 import scala.collection.{immutable, mutable}
 import SystemDao._
 import debiki.Globals
+import ed.server.spam.ClearCheckingSpamNowCache
 import play.api.libs.json.{JsObject, Json}
 import talkyard.server.JsX
 
@@ -211,6 +212,8 @@ class SystemDao(
         if (isTestSiteOkayToDelete) {
           globals.endToEndTestMailer.tell(
             "ForgetEndToEndTestEmails" -> anySitesToDelete.map(_.id), Actor.noSender)
+          globals.spamCheckActor.foreach(_.tell(
+            ClearCheckingSpamNowCache, Actor.noSender))
         }
       }
 

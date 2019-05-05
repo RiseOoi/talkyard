@@ -601,7 +601,7 @@ package object core {
     }
 
     case class Error(spamCheckerDomain: String) extends SpamCheckResult(false) {
-      override def humanReadableMessage: String = "Error talking with external service"
+      override def humanReadableMessage: String = "Error talking with " + spamCheckerDomain
     }
 
     /**
