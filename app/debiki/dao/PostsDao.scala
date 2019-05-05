@@ -618,7 +618,7 @@ trait PostsDao {
     // Note: Farily similar to editPostIfAuth() just below. [2GLK572]
     val authorId = byWho.id
 
-    require(textAndHtml.safeHtml.trim.isEmpty, "TyE8FPZE2P")
+    require(textAndHtml.safeHtml.trim.nonEmpty, "TyE8FPZE2P")
     require(lastPost.tyype == PostType.ChatMessage, o"""Post id ${lastPost.id}
           is not a chat message, it is: ${lastPost.tyype} [TyE6YUW28]""")
 
